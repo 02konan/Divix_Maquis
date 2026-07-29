@@ -1,0 +1,182 @@
+{% extends 'base-admin.html' %}
+{% block title %}Dépenses - Divix Maquis{% endblock %}
+{% block subtitle %}Dépenses{% endblock %}
+{% block content %}
+<div class="modal fade" id="depenseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="icon me-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20 7H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-2h-5c-1.1 0-2-.9-2-2v-3c0-1.1.9-2 2-2h5V9c0-1.1-.9-2-2-2"></path><path d="M17 13h5v3h-5z"></path>
+            </svg>
+        </div>
+        <div>
+            <h1 class="modal-title fs-5">Nouvelle dépense</h1>
+            <span class="small text-muted">Sortie de caisse du maquis</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post" id="depenseForm" class="vstack gap-2">
+            <div class="col mb-3">
+                <label for="depenseLibelle" class="form-label">Libellé <span class="small text-danger">*</span></label>
+                <input type="text" class="form-control" id="depenseLibelle" name="libelle" placeholder="ex: Achat casiers de bière" required>
+            </div>
+            <div class="d-flex gap-2">
+                <div class="col mb-3">
+                    <label for="depenseCategorie" class="form-label">Catégorie <span class="small text-danger">*</span></label>
+                    <select class="form-select" id="depenseCategorie" name="categorie" required>
+                        <option value="" selected disabled>--choisir--</option>
+                        {% for categorie in categories %}
+                        <option value="{{ categorie }}">{{ categorie }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col mb-3">
+                    <label for="depenseMontant" class="form-label">Montant (FCFA) <span class="small text-danger">*</span></label>
+                    <input type="number" class="form-control" id="depenseMontant" name="montant" min="1" required>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <div class="col mb-3">
+                    <label for="depenseFournisseur" class="form-label">Fournisseur</label>
+                    <input type="text" class="form-control" id="depenseFournisseur" name="fournisseur" placeholder="ex: Brassivoire">
+                </div>
+                <div class="col mb-3">
+                    <label for="depenseMode" class="form-label">Mode de paiement</label>
+                    <select class="form-select" id="depenseMode" name="mode_paiement">
+                        {% for mode in modes %}
+                        <option value="{{ mode }}">{{ mode }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <div class="col mb-3">
+                    <label for="depenseDate" class="form-label">Date</label>
+                    <input type="date" class="form-control" id="depenseDate" name="date_depense">
+                </div>
+                <div class="col mb-3">
+                    <label for="depenseCommentaire" class="form-label">Commentaire</label>
+                    <input type="text" class="form-control" id="depenseCommentaire" name="commentaire" placeholder="Facultatif">
+                </div>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" id="submitDepenseBtn" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-wrapper d-flex flex-column gap-3">
+    <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
+        <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Dépenses</span></p>
+        <button class="ms-auto btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#depenseModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
+            </svg>
+            <span class="mx-1">Dépense</span>
+        </button>
+    </div>
+
+    <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20 7H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-2h-5c-1.1 0-2-.9-2-2v-3c0-1.1.9-2 2-2h5V9c0-1.1-.9-2-2-2"></path><path d="M17 13h5v3h-5z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Dépenses du jour</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="counterdepenses_jour"></span><span class="small franc text-muted"> FCFA</span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M21 11h-3V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v13c0 1.65 1.35 3 3 3h14c1.65 0 3-1.35 3-3v-6c0-.55-.45-1-1-1"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Dépenses du mois</span>
+                    </div>
+                    <span class="ms-auto badge badge-danger">Sorties</span>
+                </div>
+                <h1 class="mt-2"><span id="counterdepenses_mois"></span><span class="small franc text-muted"> FCFA</span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 11h13v2H8zm0-5h13v2H8zm0 10h13v2H8zM3 5.5h3v3H3zm0 5h3v3H3zm0 5h3v3H3z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Opérations ce mois</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="counternb_depenses_mois"></span></h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-100 row g-3 px-0 mx-0">
+        <div class="col-12 card-group">
+            <div class="card feature-card result-table border-0 shadow-sm p-3">
+                <div class="d-flex w-100 filter">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M16 16H2v2h14v4l6-5-6-5zM8 1 2 6l6 5V7h14V5H8z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Journal des dépenses</span>
+                    </div>
+                    <div class="ms-auto d-flex gap-2 filter-content">
+                        <select id="filtreCategorie" class="form-select rounded-pill">
+                            <option value="">Toutes les catégories</option>
+                            {% for categorie in categories %}
+                            <option value="{{ categorie }}">{{ categorie }}</option>
+                            {% endfor %}
+                        </select>
+                        <form action="" class="d-flex align-items-center rounded-pill" id="searchForm" onsubmit="return false;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M10.5 19c1.98 0 3.81-.69 5.25-1.83L20 21.42l1.41-1.41-4.25-4.25a8.47 8.47 0 0 0 1.83-5.25c0-4.69-3.81-8.5-8.5-8.5S2 5.81 2 10.5 5.81 19 10.5 19m0-15c3.58 0 6.5 2.92 6.5 6.5S14.08 17 10.5 17 4 14.08 4 10.5 6.92 4 10.5 4"></path>
+                            </svg>
+                            <input type="text" class="ms-2" placeholder="Recherche..." id="searchInput" name="searchInput">
+                        </form>
+                    </div>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="table last-command align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th class="text-muted" scope="col">RÉFÉRENCE</th>
+                                <th class="text-muted" scope="col">LIBELLÉ</th>
+                                <th class="text-muted" scope="col">CATÉGORIE</th>
+                                <th class="text-muted" scope="col">FOURNISSEUR</th>
+                                <th class="text-muted" scope="col">MONTANT</th>
+                                <th class="text-muted" scope="col">MODE</th>
+                                <th class="text-muted" scope="col">DATE</th>
+                            </tr>
+                        </thead>
+                        <tbody class="result" id="tbody-depenses"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

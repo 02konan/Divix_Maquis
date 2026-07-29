@@ -1,0 +1,9 @@
+[project]
+name = "divix-maquis"
+version = "0.1.0"
+description = "Gestion de maquis et restaurant — interface Divix SysPaie, backend restauration."
+readme = "README.md"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

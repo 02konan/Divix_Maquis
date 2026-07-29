@@ -1,0 +1,36 @@
+<div class="col-2 position-fixed h-100 sidebar shadow-sm">
+    <div class="h-100 d-flex flex-column p-3 pe-4">
+        <div id="logo" class="d-flex mb-4">
+            <img src="/static/icons/logo.svg" alt="Logo">
+        </div>
+        <ul class="nav flex-column">
+            {% for item in nav_items %}
+            <li class="nav-item">
+                <a href="{{ item.url }}" class="nav-link {% if active_page == item.cle %} active {% endif %}">
+                    <i class="{{ item.icone }} me-2"></i>{{ item.libelle }}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        <ul class="nav flex-column mt-auto">
+            <li class="nav-item"><a href="#" class="nav-link"><i class="bxf bx-bell me-2"></i>Notifications</a></li>
+            <li class="nav-item"><a href="#" class="nav-link"><i class="bxf bx-help-circle me-2"></i>Support</a></li>
+            <li class="nav-item"><a href="#" class="nav-link"><i class="bxf bx-cog me-2"></i>Paramètres</a></li>
+            <div class="dropdown dropup profile mt-4 rounded">
+                <div class="d-flex align-items-center text-decoration-none dropdown-toggle" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
+                    <div class="avatar-initiales rounded-circle">{{ (session.get('user_name') or 'Divix')[:1]|upper }}</div>
+                    <div class="ms-2 d-none d-lg-block">
+                        <span class="profile-name">{{ session.get('user_name', 'Utilisateur') }}</span><br>
+                        <span class="small">{{ session.get('user_role', 'Personnel') }}</span>
+                    </div>
+                </div>
+                <ul class="dropdown-menu dropdown-menu-start shadow-sm" aria-labelledby="profileDropdown">
+                    <li><a class="dropdown-item" href="#">Mon profil</a></li>
+                    <li><a class="dropdown-item" href="#">Paramètres</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="/logout">Déconnexion</a></li>
+                </ul>
+            </div>
+        </ul>
+    </div>
+</div>

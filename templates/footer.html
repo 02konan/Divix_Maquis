@@ -1,0 +1,26 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script src="{{ url_for('static', filename='js/commun.js') }}"></script>
+    {% if active_page == 'dashboard' %}
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+    {% endif %}
+    {% if active_page == 'salle' %}
+    <script src="{{ url_for('static', filename='js/salle.js') }}" defer></script>
+    {% endif %}
+    {% if active_page == 'commande' %}
+    <script src="{{ url_for('static', filename='js/commandes.js') }}" defer></script>
+    {% endif %}
+    {% if active_page == 'menu' %}
+    <script src="{{ url_for('static', filename='js/menu.js') }}" defer></script>
+    {% endif %}
+    {% if active_page == 'stock' %}
+    <script src="{{ url_for('static', filename='js/stock.js') }}" defer></script>
+    {% endif %}
+    {% if active_page == 'caisse' %}
+    <script src="{{ url_for('static', filename='js/caisse.js') }}" defer></script>
+    {% endif %}
+    {% if active_page == 'depense' %}
+    <script src="{{ url_for('static', filename='js/depenses.js') }}" defer></script>
+    {% endif %}
+</body>
+</html>

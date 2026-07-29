@@ -1,0 +1,250 @@
+{% extends 'base-admin.html' %}
+{% block title %}Menu - Divix Maquis{% endblock %}
+{% block subtitle %}Menu{% endblock %}
+{% block content %}
+<div class="modal fade" id="articleModal" tabindex="-1" aria-labelledby="articleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="icon me-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8.1 13.34l2.83-2.83L3.91 3.5a4 4 0 0 0 0 5.66zm6.78-1.81a5.5 5.5 0 0 0 5.15-1.48 5.5 5.5 0 0 0 0-7.78l-9.19 9.19 7.78 7.78 1.41-1.41-4.24-4.24z"></path>
+            </svg>
+        </div>
+        <div>
+            <h1 class="modal-title fs-5" id="articleModalLabel">Nouvel article</h1>
+            <span class="small text-muted">Plat, grillade ou boisson</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post" enctype="multipart/form-data" id="articleForm" class="vstack gap-2">
+            <fieldset>
+                <legend>Informations générales</legend>
+                <div class="col mb-3">
+                    <label for="articleNom" class="form-label">Nom de l'article <span class="small text-danger">*</span></label>
+                    <input type="text" class="form-control" id="articleNom" name="nom" placeholder="ex: Poulet braisé entier" required>
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="articleCategorie" class="form-label">Catégorie <span class="small text-danger">*</span></label>
+                        <select class="form-select" id="articleCategorie" name="categorie" required>
+                            <option value="" selected disabled>--choisir--</option>
+                            {% for categorie in categories %}
+                            <option value="{{ categorie.id }}">{{ categorie.nom }} ({{ categorie.type }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col mb-3">
+                        <label for="articleGereStock" class="form-label">Suivi de stock <span class="small text-danger">*</span></label>
+                        <select class="form-select" id="articleGereStock" name="gere_stock" required>
+                            <option value="0" selected>Non — préparé à la commande</option>
+                            <option value="1">Oui — décompté à la vente</option>
+                        </select>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Prix</legend>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="articlePrix" class="form-label">Prix de vente (FCFA) <span class="small text-danger">*</span></label>
+                        <input type="number" class="form-control" id="articlePrix" name="prix" placeholder="0" min="0" required>
+                    </div>
+                    <div class="col mb-3">
+                        <label for="articleCout" class="form-label">Coût de revient (FCFA)</label>
+                        <input type="number" class="form-control" id="articleCout" name="cout_revient" placeholder="0" min="0">
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset id="blocStock" style="display:none;">
+                <legend>Stock</legend>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="articleStock" class="form-label">Quantité en stock</label>
+                        <input type="number" class="form-control" id="articleStock" name="stock" value="0" min="0">
+                    </div>
+                    <div class="col mb-3">
+                        <label for="articleSeuil" class="form-label">Seuil d'alerte</label>
+                        <input type="number" class="form-control" id="articleSeuil" name="seuil_alerte" value="12" min="0">
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Disponibilité & visuel</legend>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="articleDisponible" class="form-label">Disponible à la carte</label>
+                        <select class="form-select" id="articleDisponible" name="disponible">
+                            <option value="1" selected>Oui</option>
+                            <option value="0">Non</option>
+                        </select>
+                    </div>
+                    <div class="col mb-3">
+                        <label for="articleImage" class="form-label">Photo</label>
+                        <input type="file" class="form-control" id="articleImage" name="image" accept="image/*">
+                    </div>
+                </div>
+            </fieldset>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" id="submitArticleBtn" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="categorieModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+            <h1 class="modal-title fs-5">Nouvelle catégorie</h1>
+            <span class="small text-muted">Organiser la carte du maquis</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="categorieForm" class="vstack gap-2">
+            <div class="col mb-3">
+                <label for="categorieNom" class="form-label">Nom <span class="small text-danger">*</span></label>
+                <input type="text" class="form-control" id="categorieNom" name="nom" placeholder="ex: Cocktails" required>
+            </div>
+            <div class="col mb-3">
+                <label for="categorieType" class="form-label">Type</label>
+                <select class="form-select" id="categorieType" name="type">
+                    <option value="Cuisine" selected>Cuisine</option>
+                    <option value="Bar">Bar</option>
+                </select>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" id="submitCategorieBtn" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-wrapper d-flex flex-column gap-3">
+    <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
+        <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Menu</span></p>
+        <button class="ms-auto btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#categorieModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
+            </svg>
+            <span class="mx-1">Catégorie</span>
+        </button>
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#articleModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
+            </svg>
+            <span class="mx-1">Article</span>
+        </button>
+    </div>
+
+    <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="m21.72 8-1.77-5.32A1 1 0 0 0 19 2H6c-.38 0-.72.21-.89.55L2.39 8h19.34ZM2 20c0 .55.45 1 1 1h18c.55 0 1-.45 1-1V9H2z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Articles à la carte</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="countertotal_articles"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="m21.95 8.68-2-6A1 1 0 0 0 19 2H6c-.38 0-.73.21-.89.55l-3 6q0 .15-.06.3V20c0 .55.45 1 1 1h18c.55 0 1-.45 1-1V8.97ZM20 19H4v-9h16z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Articles</span>
+                    </div>
+                    <span class="ms-auto badge badge-danger">Indisponibles</span>
+                </div>
+                <h1 class="mt-2"><span id="counterindisponibles"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="m21.95 8.68-2-6A1 1 0 0 0 19 2H6c-.38 0-.73.21-.89.55l-3 6q0 .15-.06.3V20c0 .55.45 1 1 1h18c.55 0 1-.45 1-1V8.97ZM20 19H4v-9h16z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Boissons</span>
+                    </div>
+                    <span class="ms-auto badge badge-pending">Stock faible</span>
+                </div>
+                <h1 class="mt-2"><span id="counterstock_faible"></span></h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-100 row g-3 px-0 mx-0">
+        <div class="col-12 card-group">
+            <div class="card feature-card result-table border-0 shadow-sm p-3">
+                <div class="d-flex w-100 filter">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M16 16H2v2h14v4l6-5-6-5zM8 1 2 6l6 5V7h14V5H8z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Carte du maquis</span>
+                    </div>
+                    <div class="ms-auto d-flex gap-2 filter-content">
+                        <select id="filtreCategorie" class="form-select rounded-pill">
+                            <option value="">Toutes les catégories</option>
+                            {% for categorie in categories %}
+                            <option value="{{ categorie.nom }}">{{ categorie.nom }}</option>
+                            {% endfor %}
+                        </select>
+                        <form action="" class="d-flex align-items-center rounded-pill" id="searchForm" onsubmit="return false;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M10.5 19c1.98 0 3.81-.69 5.25-1.83L20 21.42l1.41-1.41-4.25-4.25a8.47 8.47 0 0 0 1.83-5.25c0-4.69-3.81-8.5-8.5-8.5S2 5.81 2 10.5 5.81 19 10.5 19m0-15c3.58 0 6.5 2.92 6.5 6.5S14.08 17 10.5 17 4 14.08 4 10.5 6.92 4 10.5 4"></path>
+                            </svg>
+                            <input type="text" class="ms-2" placeholder="Recherche..." id="searchInput" name="searchInput">
+                        </form>
+                    </div>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="table last-command align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th class="text-muted" scope="col">RÉFÉRENCE</th>
+                                <th class="text-muted" scope="col">ARTICLE</th>
+                                <th class="text-muted" scope="col">CATÉGORIE</th>
+                                <th class="text-muted" scope="col">PRIX</th>
+                                <th class="text-muted" scope="col">MARGE</th>
+                                <th class="text-muted" scope="col">STOCK</th>
+                                <th class="text-muted" scope="col">STATUT</th>
+                                <th class="text-muted text-end" scope="col">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody class="result" id="tbody-menu"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% set nav_items = [
+    {'cle': 'dashboard', 'url': '/',         'libelle': 'Dashboard', 'icone': 'bxf bx-layers'},
+    {'cle': 'salle',     'url': '/salle',    'libelle': 'Salle',     'icone': 'bxf bx-grid-alt'},
+    {'cle': 'commande',  'url': '/commande', 'libelle': 'Commandes', 'icone': 'bxf bx-receipt'},
+    {'cle': 'menu',      'url': '/menu',     'libelle': 'Menu',      'icone': 'bxf bx-restaurant'},
+    {'cle': 'stock',     'url': '/stock',    'libelle': 'Stock',     'icone': 'bxf bx-package'},
+    {'cle': 'caisse',    'url': '/caisse',   'libelle': 'Caisse',    'icone': 'bx bx-currency-notes'},
+    {'cle': 'depense',   'url': '/depense',  'libelle': 'Dépenses',  'icone': 'bxf bx-wallet'}
+] %}
+{% include 'header.html' %}
+    <div class="container-fluid box-main p-0">
+        <nav class="navbar navbar-expand-lg navbar-custom">
+            <h4>{% block subtitle %}{% endblock %}</h4>
+            <button class="btn ms-auto d-none hamburger" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasExample" aria-controls="offcanvasExample">
+                <i class="bx bx-menu-wider"></i>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navMenu">
+                <div class="ms-auto d-none d-lg-flex align-items-center gap-2">
+                    <span class="small text-muted me-2" id="horloge-service"></span>
+                    <div class="position-relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M19 12.59V10c0-3.22-2.18-5.93-5.14-6.74C13.57 2.52 12.85 2 12 2s-1.56.52-1.86 1.26C7.18 4.08 5 6.79 5 10v2.59L3.29 14.3a1 1 0 0 0-.29.71v2c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-2c0-.27-.11-.52-.29-.71zM14.82 20H9.18c.41 1.17 1.51 2 2.82 2s2.41-.83 2.82-2"></path>
+                        </svg>
+                        <span class="position-absolute p-1 bg-danger border border-light rounded-circle" id="sign-alert">
+                            <span class="visually-hidden">New alerts</span>
+                        </span>
+                    </div>
+                    <a href="/logout" class="btn btn-sm btn-outline-danger ms-1" title="Déconnexion">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M11 2h2v10h-2z"></path><path d="M15 4.53v2.16c2.36 1.13 4 3.53 4 6.32 0 3.86-3.14 7-7 7s-7-3.14-7-7c0-2.79 1.64-5.19 4-6.32V4.53C5.51 5.77 3 9.1 3 13c0 4.96 4.04 9 9 9s9-4.04 9-9c0-3.91-2.51-7.24-6-8.47"></path>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        {% include 'sidebar.html' %}
+
+        <div class="container-fluid main d-flex gap-3 flex-column">
+            {% block content %}{% endblock %}
+        </div>
+
+        <nav class="navbar navbar-expand-lg navbar-mobile shadow">
+            <div class="w-100 navbar-nav-box">
+                <ul class="menu me-auto mb-2 mb-lg-0">
+                    {% for item in nav_items %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if active_page == item.cle %} active {% endif %}" aria-current="page" href="{{ item.url }}">
+                            <div class="icon-nav">
+                                <i class="{{ item.icone }} me-2"></i>
+                            </div>
+                            <span>{{ item.libelle }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </nav>
+
+        <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasExample" aria-labelledby="offcanvasExampleLabel">
+            <div class="offcanvas-header">
+                <img class="logo-offcanvas" src="/static/icons/logo.svg" alt="Logo">
+            </div>
+            <div class="offcanvas-body d-flex flex-column">
+                <ul class="nav flex-column">
+                    {% for item in nav_items %}
+                    <li class="nav-item">
+                        <a href="{{ item.url }}" class="nav-link {% if active_page == item.cle %} active {% endif %}">
+                            <i class="{{ item.icone }} me-2"></i>{{ item.libelle }}
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <div class="dropdown dropup profile mt-auto rounded">
+                    <div class="d-flex align-items-center text-decoration-none dropdown-toggle" id="profileDropdownMobile" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
+                        <div class="avatar-initiales rounded-circle">{{ (session.get('user_name') or 'Divix')[:1]|upper }}</div>
+                        <div class="ms-2">
+                            <span class="profile-name">{{ session.get('user_name', 'Utilisateur') }}</span><br>
+                            <span class="small">{{ session.get('user_role', 'Personnel') }}</span>
+                        </div>
+                    </div>
+                    <ul class="dropdown-menu dropdown-menu-start shadow-sm" aria-labelledby="profileDropdownMobile">
+                        <li><a class="dropdown-item" href="#">Mon profil</a></li>
+                        <li><a class="dropdown-item" href="/logout">Déconnexion</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% include 'footer.html' %}

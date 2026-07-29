@@ -1,0 +1,148 @@
+{% extends 'base-admin.html' %}
+{% block title %}Salle - Divix Maquis{% endblock %}
+{% block subtitle %}Salle{% endblock %}
+{% block content %}
+<div class="modal fade" id="tableModal" tabindex="-1" aria-labelledby="tableModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="icon me-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20 3H4c-1.1 0-2 .9-2 2v4h20V5c0-1.1-.9-2-2-2M2 11v2h9v8h2v-8h9v-2z"></path>
+            </svg>
+        </div>
+        <div>
+            <h1 class="modal-title fs-5" id="tableModalLabel">Nouvelle table</h1>
+            <span class="small text-muted">Ajouter une table au plan de salle</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post" id="tableForm" class="vstack gap-2">
+            <fieldset>
+                <legend>Informations</legend>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="tableNumero" class="form-label">Numéro <span class="small text-danger">*</span></label>
+                        <input type="text" class="form-control" id="tableNumero" name="numero" placeholder="ex: 13" required>
+                    </div>
+                    <div class="col mb-3">
+                        <label for="tablePlaces" class="form-label">Nombre de places <span class="small text-danger">*</span></label>
+                        <input type="number" class="form-control" id="tablePlaces" name="places" value="4" min="1" required>
+                    </div>
+                </div>
+                <div class="col mb-3">
+                    <label for="tableZone" class="form-label">Zone <span class="small text-danger">*</span></label>
+                    <select class="form-select" id="tableZone" name="zone" required>
+                        <option value="Salle" selected>Salle</option>
+                        <option value="Terrasse">Terrasse</option>
+                        <option value="Bar">Bar</option>
+                        <option value="VIP">VIP</option>
+                    </select>
+                </div>
+            </fieldset>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" id="submitTableBtn" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-wrapper d-flex flex-column gap-3">
+    <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
+        <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Salle</span></p>
+        <a class="ms-auto btn btn-sm btn-outline-secondary" href="/commande">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M21 11h-3V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v13c0 1.65 1.35 3 3 3h14c1.65 0 3-1.35 3-3v-6c0-.55-.45-1-1-1m-7 6h-3v-2h3zm0-4H6v-2h8zm0-4H6V7h8zm6 9c0 .55-.45 1-1 1s-1-.45-1-1v-5h2z"></path>
+            </svg>
+            <span class="mx-1">Prendre une commande</span>
+        </a>
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#tableModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
+            </svg>
+            <span class="mx-1">Table</span>
+        </button>
+    </div>
+
+    <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20 3H4c-1.1 0-2 .9-2 2v4h20V5c0-1.1-.9-2-2-2M2 11v2h9v8h2v-8h9v-2z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Total tables</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="countertotal_tables"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 5a3 3 0 1 0 0 6 3 3 0 1 0 0-6m1 7h-2c-2.76 0-5 2.24-5 5v.5c0 .83.67 1.5 1.5 1.5h9c.83 0 1.5-.67 1.5-1.5V17c0-2.76-2.24-5-5-5"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Tables</span>
+                    </div>
+                    <span class="ms-auto badge badge-pending">Occupées</span>
+                </div>
+                <h1 class="mt-2"><span id="countertables_occupees"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="m9.71 17.71 9-9-1.42-1.42L9.71 14.88 6.71 11.88l-1.42 1.42z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Tables</span>
+                    </div>
+                    <span class="ms-auto badge badge-success">Libres</span>
+                </div>
+                <h1 class="mt-2"><span id="countertables_libres"></span></h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-100 row g-3 px-0 mx-0">
+        <div class="col-12 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100 filter">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M16 16H2v2h14v4l6-5-6-5zM8 1 2 6l6 5V7h14V5H8z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Plan de salle</span>
+                    </div>
+                    <div class="ms-auto d-flex gap-2 filter-content">
+                        <select id="filtreZone" class="form-select rounded-pill">
+                            <option value="">Toutes les zones</option>
+                            <option value="Salle">Salle</option>
+                            <option value="Terrasse">Terrasse</option>
+                            <option value="Bar">Bar</option>
+                            <option value="VIP">VIP</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="plan-salle mt-3" id="plan-salle"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

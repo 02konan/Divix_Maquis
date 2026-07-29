@@ -1,0 +1,249 @@
+{% extends 'base-admin.html' %}
+{% block title %}Commandes - Divix Maquis{% endblock %}
+{% block subtitle %}Commandes{% endblock %}
+{% block content %}
+<div class="modal fade" id="commandeModal" tabindex="-1" aria-labelledby="commandeModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="icon me-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M21 11h-3V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v13c0 1.65 1.35 3 3 3h14c1.65 0 3-1.35 3-3v-6c0-.55-.45-1-1-1m-7 6h-3v-2h3zm0-4H6v-2h8zm0-4H6V7h8zm6 9c0 .55-.45 1-1 1s-1-.45-1-1v-5h2z"></path>
+            </svg>
+        </div>
+        <div>
+            <h1 class="modal-title fs-5" id="commandeModalLabel">Nouvelle commande</h1>
+            <span class="small text-muted">Prise de commande en salle</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post" id="commandeForm" class="vstack gap-2">
+            <fieldset>
+                <legend>Service</legend>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="typeService" class="form-label">Type de service <span class="small text-danger">*</span></label>
+                        <select class="form-select" id="typeService" name="type_service" required>
+                            {% for type_service in types_service %}
+                            <option value="{{ type_service }}">{{ type_service }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col mb-3">
+                        <label for="idTable" class="form-label">Table</label>
+                        <select class="form-select" id="idTable" name="id_table">
+                            <option value="">— Aucune (comptoir) —</option>
+                            {% for table in tables %}
+                            <option value="{{ table.id }}">
+                                Table {{ table.numero }} · {{ table.zone }} ({{ table.places }} pl.){% if table.statut != 'Libre' %} — {{ table.statut }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-3 mb-3">
+                        <label for="couverts" class="form-label">Couverts</label>
+                        <input type="number" class="form-control" id="couverts" name="couverts" value="1" min="1">
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="nomClient" class="form-label">Nom du client</label>
+                        <input type="text" class="form-control" id="nomClient" name="nom_client" placeholder="Client comptoir">
+                    </div>
+                    <div class="col mb-3">
+                        <label for="telephoneClient" class="form-label">Téléphone</label>
+                        <input type="text" class="form-control" id="telephoneClient" name="telephone_client" placeholder="Utile pour la livraison">
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Articles</legend>
+                <div class="col mb-2">
+                    <label class="form-label">Rechercher un plat ou une boisson</label>
+                    <div class="position-relative">
+                        <input type="text" class="form-control" id="articleSearch" placeholder="ex: poulet braisé, bière..." autocomplete="off">
+                        <ul class="list-group position-absolute w-100 shadow-sm" id="articleDropdown"
+                            style="display:none; max-height:200px; overflow-y:auto; top:100%; left:0; z-index:1055;"></ul>
+                    </div>
+                    <div id="selectedArticlesBox" class="mt-2 p-2 rounded border bg-light">
+                        <div class="d-flex flex-column gap-2" id="selectedArticlesTags">
+                            <span class="small text-muted">Aucun article sélectionné</span>
+                        </div>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Addition</legend>
+                <div class="d-flex gap-2">
+                    <div class="col mb-3">
+                        <label for="sousTotal" class="form-label">Sous-total</label>
+                        <input type="text" class="form-control" id="sousTotal" value="0 FCFA" readonly>
+                    </div>
+                    <div class="col mb-3">
+                        <label for="remise" class="form-label">Remise (FCFA)</label>
+                        <input type="number" class="form-control" id="remise" name="remise" value="0" min="0">
+                    </div>
+                    <div class="col mb-3">
+                        <label for="totalCommande" class="form-label">Net à payer</label>
+                        <input type="text" class="form-control fw-semibold" id="totalCommande" value="0 FCFA" readonly>
+                    </div>
+                </div>
+                <div class="col mb-3">
+                    <label for="commentaire" class="form-label">Commentaire cuisine</label>
+                    <input type="text" class="form-control" id="commentaire" name="commentaire" placeholder="ex: bien épicé, sans piment...">
+                </div>
+            </fieldset>
+
+            <input type="hidden" name="articles" id="articlesHidden" value="[]">
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="submitCommandeBtn" disabled>
+            <span id="submitCommandeBtnText">Chargement du menu...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+            <h1 class="modal-title fs-5" id="detailTitre">Détail de la commande</h1>
+            <span class="small text-muted" id="detailSousTitre"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="imprimerTicketBtn">Imprimer le ticket</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-wrapper d-flex flex-column gap-3">
+    <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
+        <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Commandes</span></p>
+        <a class="ms-auto btn btn-sm btn-outline-secondary" href="/caisse">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20 7H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-2h-5c-1.1 0-2-.9-2-2v-3c0-1.1.9-2 2-2h5V9c0-1.1-.9-2-2-2"></path><path d="M17 13h5v3h-5z"></path>
+            </svg>
+            <span class="mx-1">Encaisser</span>
+        </a>
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#commandeModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
+            </svg>
+            <span class="mx-1">Commande</span>
+        </button>
+    </div>
+
+    <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M21 11h-3V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v13c0 1.65 1.35 3 3 3h14c1.65 0 3-1.35 3-3v-6c0-.55-.45-1-1-1m-7 6h-3v-2h3zm0-4H6v-2h8zm0-4H6V7h8z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Commandes du jour</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="countercommandes_jour"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m1 11H11V6h2z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Tickets ouverts</span>
+                    </div>
+                    <span class="ms-auto badge badge-pending">En service</span>
+                </div>
+                <h1 class="mt-2"><span id="countercommandes_en_cours"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C8.02 2 4 3.37 4 6v12c0 2.63 4.02 4 8 4s8-1.37 8-4V6c0-2.63-4.02-4-8-4m0 18c-3.72 0-6-1.29-6-2v-1.27c1.54.84 3.78 1.27 6 1.27s4.46-.43 6-1.27V18c0 .71-2.28 2-6 2"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Reste à encaisser</span>
+                    </div>
+                    <span class="ms-auto badge badge-danger">Impayé</span>
+                </div>
+                <h1 class="mt-2"><span id="countermontant_impaye"></span><span class="small franc text-muted"> FCFA</span></h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-100 row g-3 px-0 mx-0">
+        <div class="col-12 card-group">
+            <div class="card feature-card result-table border-0 shadow-sm p-3">
+                <div class="d-flex w-100 filter">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M16 16H2v2h14v4l6-5-6-5zM8 1 2 6l6 5V7h14V5H8z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Historique des commandes</span>
+                    </div>
+                    <div class="ms-auto d-flex gap-2 filter-content">
+                        <select id="filtreStatut" class="form-select rounded-pill">
+                            <option value="">Tous les statuts</option>
+                            <option value="En cours">En cours</option>
+                            <option value="Servie">Servie</option>
+                            <option value="Payée">Payée</option>
+                            <option value="Annulée">Annulée</option>
+                        </select>
+                        <form action="" class="d-flex align-items-center rounded-pill" id="searchForm" onsubmit="return false;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M10.5 19c1.98 0 3.81-.69 5.25-1.83L20 21.42l1.41-1.41-4.25-4.25a8.47 8.47 0 0 0 1.83-5.25c0-4.69-3.81-8.5-8.5-8.5S2 5.81 2 10.5 5.81 19 10.5 19m0-15c3.58 0 6.5 2.92 6.5 6.5S14.08 17 10.5 17 4 14.08 4 10.5 6.92 4 10.5 4"></path>
+                            </svg>
+                            <input type="text" class="ms-2" placeholder="Recherche..." id="searchInput" name="searchInput">
+                        </form>
+                    </div>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="table last-command align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th class="text-muted" scope="col">RÉFÉRENCE</th>
+                                <th class="text-muted" scope="col">TABLE</th>
+                                <th class="text-muted" scope="col">CLIENT</th>
+                                <th class="text-muted" scope="col">ARTICLES</th>
+                                <th class="text-muted" scope="col">MONTANT</th>
+                                <th class="text-muted" scope="col">RESTE</th>
+                                <th class="text-muted" scope="col">STATUT</th>
+                                <th class="text-muted" scope="col">DATE</th>
+                                <th class="text-muted text-end" scope="col">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody class="result" id="tbody-commandes"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

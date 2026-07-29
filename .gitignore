@@ -1,0 +1,19 @@
+# Environnements
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Base de données locale
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Uploads générés à l'exécution
+static/uploads/*
+!static/uploads/.gitkeep

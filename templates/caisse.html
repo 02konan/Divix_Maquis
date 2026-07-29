@@ -1,0 +1,188 @@
+{% extends 'base-admin.html' %}
+{% block title %}Caisse - Divix Maquis{% endblock %}
+{% block subtitle %}Caisse{% endblock %}
+{% block content %}
+<div class="modal fade" id="encaissementModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="icon me-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20 7H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-2h-5c-1.1 0-2-.9-2-2v-3c0-1.1.9-2 2-2h5V9c0-1.1-.9-2-2-2"></path><path d="M17 13h5v3h-5z"></path>
+            </svg>
+        </div>
+        <div>
+            <h1 class="modal-title fs-5">Encaisser une commande</h1>
+            <span class="small text-muted">Paiement total ou partiel</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post" id="encaissementForm" class="vstack gap-2">
+            <div class="col mb-3">
+                <label for="referenceCommande" class="form-label">Commande <span class="small text-danger">*</span></label>
+                <select class="form-select" id="referenceCommande" name="reference" required>
+                    <option value="" selected disabled>Chargement...</option>
+                </select>
+            </div>
+            <div class="d-flex gap-2">
+                <div class="col mb-3">
+                    <label for="resteAPayer" class="form-label">Reste à payer</label>
+                    <input type="text" class="form-control" id="resteAPayer" value="0 FCFA" readonly>
+                </div>
+                <div class="col mb-3">
+                    <label for="montantEncaisse" class="form-label">Montant reçu (FCFA) <span class="small text-danger">*</span></label>
+                    <input type="number" class="form-control" id="montantEncaisse" name="montant" min="1" required>
+                </div>
+            </div>
+            <div class="col mb-3">
+                <label for="modePaiement" class="form-label">Mode de paiement <span class="small text-danger">*</span></label>
+                <select class="form-select" id="modePaiement" name="mode" required>
+                    {% for mode in modes %}
+                    <option value="{{ mode }}">{{ mode }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col mb-3">
+                <label for="commentairePaiement" class="form-label">Commentaire</label>
+                <input type="text" class="form-control" id="commentairePaiement" name="commentaire" placeholder="Facultatif">
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" id="submitEncaissementBtn" class="btn btn-primary">Encaisser</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-wrapper d-flex flex-column gap-3">
+    <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
+        <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Caisse</span></p>
+        <button class="ms-auto btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#encaissementModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
+            </svg>
+            <span class="mx-1">Encaissement</span>
+        </button>
+    </div>
+
+    <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m1 14.91V18h-2v-1.08c-2.34-.37-3-2-3-2.92h2c.01.14.16 1 2 1 1.38 0 2-.58 2-1 0-.32 0-1-2-1-3.48 0-4-1.88-4-3 0-1.29 1.03-2.58 3-2.91V6h2v1.12c1.73.41 2.4 1.85 2.4 2.88h-2C13.39 9.64 13.18 9 12 9c-1.3 0-2 .52-2 1 0 .37 0 1 2 1 3.48 0 4 1.88 4 3 0 1.29-1.03 2.58-3 2.91"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Encaissé aujourd'hui</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="counterencaisse_jour"></span><span class="small franc text-muted"> FCFA</span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20 7H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-2h-5c-1.1 0-2-.9-2-2v-3c0-1.1.9-2 2-2h5V9c0-1.1-.9-2-2-2"></path><path d="M17 13h5v3h-5z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Encaissements du jour</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="counternb_paiements_jour"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C8.02 2 4 3.37 4 6v12c0 2.63 4.02 4 8 4s8-1.37 8-4V6c0-2.63-4.02-4-8-4m0 18c-3.72 0-6-1.29-6-2v-1.27c1.54.84 3.78 1.27 6 1.27s4.46-.43 6-1.27V18c0 .71-2.28 2-6 2"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Recette cumulée</span>
+                    </div>
+                    <span class="ms-auto badge badge-success">Cumulé</span>
+                </div>
+                <h1 class="mt-2"><span id="counterencaisse_total"></span><span class="small franc text-muted"> FCFA</span></h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-100 row g-3 px-0 mx-0">
+        <div class="col-12 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex align-items-center w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6.17 21H2.84c-.46 0-.83-.45-.83-1v-7c0-.55.37-1 .83-1h3.33c.46 0 .83.45.83 1v7c0 .55-.37 1-.83 1"></path><rect width="5" height="18" x="9.5" y="3" rx="1" ry="1"></rect><path d="M21.17 21h-3.33c-.46 0-.83-.45-.83-1V9c0-.55.37-1 .83-1h3.33c.46 0 .83.45.83 1v11c0 .55-.37 1-.83 1"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Répartition par mode de paiement (aujourd'hui)</span>
+                    </div>
+                </div>
+                <div class="w-100 mt-3 d-flex flex-wrap gap-2" id="modes-paiement">
+                    <span class="small text-muted">Chargement...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-100 row g-3 px-0 mx-0">
+        <div class="col-12 card-group">
+            <div class="card feature-card result-table border-0 shadow-sm p-3">
+                <div class="d-flex w-100 filter">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M16 16H2v2h14v4l6-5-6-5zM8 1 2 6l6 5V7h14V5H8z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Journal de caisse</span>
+                    </div>
+                    <div class="ms-auto d-flex gap-2 filter-content">
+                        <select id="filtreMode" class="form-select rounded-pill">
+                            <option value="">Tous les modes</option>
+                            {% for mode in modes %}
+                            <option value="{{ mode }}">{{ mode }}</option>
+                            {% endfor %}
+                        </select>
+                        <form action="" class="d-flex align-items-center rounded-pill" id="searchForm" onsubmit="return false;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M10.5 19c1.98 0 3.81-.69 5.25-1.83L20 21.42l1.41-1.41-4.25-4.25a8.47 8.47 0 0 0 1.83-5.25c0-4.69-3.81-8.5-8.5-8.5S2 5.81 2 10.5 5.81 19 10.5 19m0-15c3.58 0 6.5 2.92 6.5 6.5S14.08 17 10.5 17 4 14.08 4 10.5 6.92 4 10.5 4"></path>
+                            </svg>
+                            <input type="text" class="ms-2" placeholder="Recherche..." id="searchInput" name="searchInput">
+                        </form>
+                    </div>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="table last-command align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th class="text-muted" scope="col">REÇU</th>
+                                <th class="text-muted" scope="col">COMMANDE</th>
+                                <th class="text-muted" scope="col">TABLE</th>
+                                <th class="text-muted" scope="col">CLIENT</th>
+                                <th class="text-muted" scope="col">MONTANT</th>
+                                <th class="text-muted" scope="col">MODE</th>
+                                <th class="text-muted" scope="col">CAISSIER</th>
+                                <th class="text-muted" scope="col">DATE</th>
+                            </tr>
+                        </thead>
+                        <tbody class="result" id="tbody-caisse"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
