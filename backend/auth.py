@@ -13,7 +13,7 @@ REQUETE_UTILISATEUR = """
 
 def authentifier(email, mot_de_passe):
     """Renvoie l'utilisateur si les identifiants sont valides, sinon None."""
-    ligne = lire_un(REQUETE_UTILISATEUR.format(condition="email = ?"), (email,))
+    ligne = lire_un(REQUETE_UTILISATEUR.format(condition="email = %s"), (email,))
     if not ligne or not check_password_hash(ligne["mot_de_passe"], mot_de_passe):
         return None
     ligne.pop("mot_de_passe")
@@ -22,7 +22,7 @@ def authentifier(email, mot_de_passe):
 
 def utilisateur_par_id(id_utilisateur):
     ligne = lire_un(
-        REQUETE_UTILISATEUR.format(condition="utilisateurs.id = ?"), (id_utilisateur,)
+        REQUETE_UTILISATEUR.format(condition="utilisateurs.id = %s"), (id_utilisateur,)
     )
     if ligne:
         ligne.pop("mot_de_passe")
@@ -32,6 +32,6 @@ def utilisateur_par_id(id_utilisateur):
 def creer_utilisateur(nom, email, mot_de_passe, id_role):
     return executer(
         """INSERT INTO utilisateurs (nom, email, mot_de_passe, id_role)
-           VALUES (?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s)""",
         (nom, email, generate_password_hash(mot_de_passe), id_role),
     )

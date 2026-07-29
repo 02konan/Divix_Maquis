@@ -1,6 +1,5 @@
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -8,17 +7,46 @@ import pytest
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE))
 
+BASE_TEST = "divix_maquis_test"
 
-@pytest.fixture()
-def app_maquis():
-    """Application branchée sur une base SQLite temporaire remplie de données."""
-    fichier = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    fichier.close()
-    os.environ["DATABASE"] = fichier.name
 
+def _decharger_modules():
+    """Force la relecture de la configuration MySQL au prochain import."""
     for module in list(sys.modules):
         if module == "app" or module.startswith("backend"):
             del sys.modules[module]
+
+
+def _supprimer_base():
+    import pymysql
+
+    from backend.database import nom_base, parametres_connexion
+
+    conn = pymysql.connect(**parametres_connexion(avec_base=False))
+    try:
+        with conn.cursor() as curseur:
+            curseur.execute(f"DROP DATABASE IF EXISTS `{nom_base()}`")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@pytest.fixture()
+def app_maquis():
+    """Application branchée sur une base MySQL de test remplie de données."""
+    os.environ["DATABASE"] = BASE_TEST
+    _decharger_modules()
+
+    import pymysql
+
+    from backend.database import parametres_connexion
+
+    try:
+        pymysql.connect(**parametres_connexion(avec_base=False)).close()
+    except pymysql.MySQLError as erreur:
+        pytest.skip(f"Serveur MySQL indisponible : {erreur}")
+
+    _supprimer_base()
 
     from backend.donnees_demo import peupler
 
@@ -29,7 +57,7 @@ def app_maquis():
     app.config.update(TESTING=True, SECRET_KEY="test")
     yield app
 
-    os.unlink(fichier.name)
+    _supprimer_base()
     os.environ.pop("DATABASE", None)
 
 

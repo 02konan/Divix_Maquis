@@ -5,9 +5,9 @@ env/
 venv/
 ENV/
 
-# Base de données locale
-*.db
-*.sqlite3
+# Sauvegardes de base
+*.sql.gz
+dumps/
 
 # Python
 __pycache__/

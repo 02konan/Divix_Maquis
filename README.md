@@ -5,8 +5,8 @@ stock des boissons, caisse et dépenses.
 
 L'interface reprend intégralement celle de **Divix SysPaie** (mêmes feuilles de style,
 même structure de pages, mêmes composants). Seul le backend a été remplacé : le métier
-« ventes à crédit » a laissé la place au métier « restauration », et la base MySQL à
-SQLite pour que le projet démarre sans aucune configuration.
+« ventes à crédit » a laissé la place au métier « restauration ». Les données sont
+stockées dans **MySQL** (MySQL ≥ 8.0.13 ou MariaDB ≥ 10.2).
 
 ## Démarrage
 
@@ -15,9 +15,23 @@ python -m venv .venv
 source .venv/bin/activate          # Windows : .venv\Scripts\activate
 pip install -r requirements.txt
 
-python -m backend.donnees_demo     # crée maquis.db + un jeu de démonstration
+cp .env.example .env               # renseigner les identifiants MySQL
+python -m backend.donnees_demo     # crée la base + un jeu de démonstration
 python app.py                      # http://127.0.0.1:5000
 ```
+
+L'application crée elle-même la base (`CREATE DATABASE IF NOT EXISTS`) et les tables au
+démarrage : il suffit que le serveur MySQL soit joignable et que l'utilisateur ait le
+droit de créer une base. Connexion configurée par variables d'environnement :
+
+| Variable            | Défaut       | Rôle |
+|---------------------|--------------|------|
+| `MYSQL_HOST`        | `127.0.0.1`  | Hôte du serveur |
+| `MYSQL_PORT`        | `3306`       | Port |
+| `MYSQL_USER`        | `root`       | Utilisateur |
+| `MYSQL_PASSWORD`    | *(vide)*     | Mot de passe |
+| `DATABASE`          | `divix_maquis` | Nom de la base |
+| `MYSQL_UNIX_SOCKET` | —            | Socket Unix, au lieu d'une connexion TCP |
 
 Comptes de démonstration :
 
@@ -48,7 +62,7 @@ Comptes de démonstration :
 divix_maquis/
 ├── app.py                  routes Flask uniquement (validation + JSON)
 ├── backend/
-│   ├── schema.sql          schéma SQLite
+│   ├── schema.sql          schéma MySQL
 │   ├── database.py         connexion et helpers de requête
 │   ├── auth.py             authentification (mots de passe hachés)
 │   ├── models.py           utilisateur Flask-Login
@@ -82,6 +96,10 @@ pip install -r dev-requirements.txt
 python -m pytest tests/
 ```
 
+Les tests créent puis suppriment une base `divix_maquis_test` sur le serveur configuré
+(les mêmes variables `MYSQL_*` qu'en développement). Si aucun serveur MySQL n'est
+joignable, ils sont ignorés (`skipped`) plutôt qu'en échec.
+
 Les tests couvrent l'authentification, l'accès aux pages, les endpoints JSON, la
 décrémentation du stock, le refus des commandes en rupture, le fait que le prix envoyé
 par le client est ignoré, et le cycle d'encaissement partiel puis total.
@@ -89,8 +107,9 @@ par le client est ignoré, et le cycle d'encaissement partiel puis total.
 ## Passer en production
 
 - Renseigner `SECRET_KEY` dans `.env` et changer les mots de passe de démonstration.
+- Créer un utilisateur MySQL dédié à l'application plutôt que d'utiliser `root`.
 - Servir l'application avec `gunicorn app:app` derrière un reverse proxy.
-- Sauvegarder régulièrement `maquis.db` (ou pointer `DATABASE` vers un autre chemin).
+- Sauvegarder régulièrement la base : `mysqldump divix_maquis | gzip > sauvegarde.sql.gz`.
 - Les librairies d'interface (Bootstrap, SweetAlert2, Chart.js, Boxicons) sont chargées
   depuis des CDN, comme dans Divix SysPaie. Si le maquis a une connexion instable,
   il vaut mieux les héberger localement dans `static/vendor/` : l'interface reste

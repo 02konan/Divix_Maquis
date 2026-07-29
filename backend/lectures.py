@@ -19,7 +19,7 @@ def liste_tables():
         FROM tables_salle t
         LEFT JOIN commandes c
                ON c.id_table = t.id AND c.statut IN ('En cours', 'Servie')
-        ORDER BY t.zone, CAST(t.numero AS INTEGER), t.numero
+        ORDER BY t.zone, CAST(t.numero AS UNSIGNED), t.numero
         """
     )
 
@@ -37,7 +37,7 @@ def compteurs_salle():
 
 
 def table_par_id(id_table):
-    return lire_un("SELECT * FROM tables_salle WHERE id = ?", (id_table,))
+    return lire_un("SELECT * FROM tables_salle WHERE id = %s", (id_table,))
 
 
 # ----------------------------------------------------------------------------
@@ -150,7 +150,7 @@ def derniers_mouvements(limite=50):
         JOIN articles a ON m.id_article = a.id
         LEFT JOIN utilisateurs u ON m.id_utilisateur = u.id
         ORDER BY m.date_mouvement DESC, m.id DESC
-        LIMIT ?
+        LIMIT %s
         """,
         (limite,),
     )
@@ -175,7 +175,7 @@ def liste_commandes(limite=200):
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON c.id_utilisateur = u.id
         ORDER BY c.id DESC
-        LIMIT ?
+        LIMIT %s
         """,
         (limite,),
     )
@@ -193,7 +193,7 @@ def resume_articles(id_commande):
         SELECT a.nom, l.quantite
         FROM lignes_commande l
         JOIN articles a ON l.id_article = a.id
-        WHERE l.id_commande = ?
+        WHERE l.id_commande = %s
         ORDER BY l.id
         """,
         (id_commande,),
@@ -211,7 +211,7 @@ def detail_commande(reference):
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON c.id_utilisateur = u.id
-        WHERE c.reference = ?
+        WHERE c.reference = %s
         """,
         (reference,),
     )
@@ -227,7 +227,7 @@ def detail_commande(reference):
                l.total, l.note
         FROM lignes_commande l
         JOIN articles a ON l.id_article = a.id
-        WHERE l.id_commande = ?
+        WHERE l.id_commande = %s
         ORDER BY l.id
         """,
         (commande["id"],),
@@ -235,7 +235,7 @@ def detail_commande(reference):
     commande["paiements"] = lire_tout(
         """
         SELECT reference, montant, mode, date_paiement
-        FROM paiements WHERE id_commande = ? ORDER BY id
+        FROM paiements WHERE id_commande = %s ORDER BY id
         """,
         (commande["id"],),
     )
@@ -245,7 +245,7 @@ def detail_commande(reference):
 def compteurs_commandes():
     return {
         "commandes_jour": valeur(
-            "SELECT COUNT(*) FROM commandes WHERE date(date_commande) = date('now', 'localtime')"
+            "SELECT COUNT(*) FROM commandes WHERE DATE(date_commande) = CURDATE()"
         ),
         "commandes_en_cours": valeur(
             "SELECT COUNT(*) FROM commandes WHERE statut IN ('En cours', 'Servie')"
@@ -281,7 +281,7 @@ def liste_paiements(limite=200):
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON p.id_utilisateur = u.id
         ORDER BY p.id DESC
-        LIMIT ?
+        LIMIT %s
         """,
         (limite,),
     )
@@ -292,14 +292,14 @@ def compteurs_caisse():
         "encaisse_jour": round(
             valeur(
                 """SELECT SUM(montant) FROM paiements
-                   WHERE date(date_paiement) = date('now', 'localtime')"""
+                   WHERE DATE(date_paiement) = CURDATE()"""
             ),
             2,
         ),
         "encaisse_total": round(valeur("SELECT SUM(montant) FROM paiements"), 2),
         "nb_paiements_jour": valeur(
             """SELECT COUNT(*) FROM paiements
-               WHERE date(date_paiement) = date('now', 'localtime')"""
+               WHERE DATE(date_paiement) = CURDATE()"""
         ),
     }
 
@@ -324,7 +324,7 @@ def repartition_modes_paiement():
         """
         SELECT mode, COUNT(*) AS nombre, SUM(montant) AS total
         FROM paiements
-        WHERE date(date_paiement) = date('now', 'localtime')
+        WHERE DATE(date_paiement) = CURDATE()
         GROUP BY mode
         ORDER BY total DESC
         """
@@ -345,7 +345,7 @@ def liste_depenses(limite=200):
         FROM depenses d
         LEFT JOIN utilisateurs u ON d.id_utilisateur = u.id
         ORDER BY d.date_depense DESC, d.id DESC
-        LIMIT ?
+        LIMIT %s
         """,
         (limite,),
     )
@@ -355,20 +355,22 @@ def compteurs_depenses():
     return {
         "depenses_jour": round(
             valeur(
-                "SELECT SUM(montant) FROM depenses WHERE date_depense = date('now', 'localtime')"
+                "SELECT SUM(montant) FROM depenses WHERE date_depense = CURDATE()"
             ),
             2,
         ),
         "depenses_mois": round(
             valeur(
                 """SELECT SUM(montant) FROM depenses
-                   WHERE strftime('%Y-%m', date_depense) = strftime('%Y-%m', 'now', 'localtime')"""
+                   WHERE YEAR(date_depense) = YEAR(CURDATE())
+                     AND MONTH(date_depense) = MONTH(CURDATE())"""
             ),
             2,
         ),
         "nb_depenses_mois": valeur(
             """SELECT COUNT(*) FROM depenses
-               WHERE strftime('%Y-%m', date_depense) = strftime('%Y-%m', 'now', 'localtime')"""
+               WHERE YEAR(date_depense) = YEAR(CURDATE())
+                 AND MONTH(date_depense) = MONTH(CURDATE())"""
         ),
     }
 
@@ -382,7 +384,7 @@ def chiffre_affaires_jour():
     return round(
         valeur(
             """SELECT SUM(montant) FROM paiements
-               WHERE date(date_paiement) = date('now', 'localtime')"""
+               WHERE DATE(date_paiement) = CURDATE()"""
         ),
         2,
     )
@@ -395,11 +397,11 @@ def chiffre_affaires_total():
 def ticket_moyen_jour():
     total = valeur(
         """SELECT SUM(montant_total) FROM commandes
-           WHERE date(date_commande) = date('now', 'localtime') AND statut != 'Annulée'"""
+           WHERE DATE(date_commande) = CURDATE() AND statut != 'Annulée'"""
     )
     nombre = valeur(
         """SELECT COUNT(*) FROM commandes
-           WHERE date(date_commande) = date('now', 'localtime') AND statut != 'Annulée'"""
+           WHERE DATE(date_commande) = CURDATE() AND statut != 'Annulée'"""
     )
     return round(total / nombre, 2) if nombre else 0
 
@@ -407,7 +409,7 @@ def ticket_moyen_jour():
 def couverts_jour():
     return valeur(
         """SELECT SUM(couverts) FROM commandes
-           WHERE date(date_commande) = date('now', 'localtime') AND statut != 'Annulée'"""
+           WHERE DATE(date_commande) = CURDATE() AND statut != 'Annulée'"""
     )
 
 
@@ -416,9 +418,9 @@ def ca_par_jour(nb_jours=7):
     debut = date.today() - timedelta(days=nb_jours - 1)
     lignes = lire_tout(
         """
-        SELECT date(date_paiement) AS jour, SUM(montant) AS revenu
+        SELECT DATE(date_paiement) AS jour, SUM(montant) AS revenu
         FROM paiements
-        WHERE date(date_paiement) >= ?
+        WHERE DATE(date_paiement) >= %s
         GROUP BY jour
         """,
         (debut.isoformat(),),
@@ -427,9 +429,9 @@ def ca_par_jour(nb_jours=7):
 
     lignes_commandes = lire_tout(
         """
-        SELECT date(date_commande) AS jour, COUNT(*) AS nombre
+        SELECT DATE(date_commande) AS jour, COUNT(*) AS nombre
         FROM commandes
-        WHERE date(date_commande) >= ? AND statut != 'Annulée'
+        WHERE DATE(date_commande) >= %s AND statut != 'Annulée'
         GROUP BY jour
         """,
         (debut.isoformat(),),
@@ -458,12 +460,12 @@ def top_articles(limite=5, nb_jours=30):
         JOIN articles a ON l.id_article = a.id
         JOIN commandes c ON l.id_commande = c.id
         WHERE c.statut != 'Annulée'
-          AND date(c.date_commande) >= date('now', 'localtime', ?)
-        GROUP BY a.id
+          AND DATE(c.date_commande) >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+        GROUP BY a.id, a.nom
         ORDER BY quantite DESC
-        LIMIT ?
+        LIMIT %s
         """,
-        (f"-{nb_jours} days", limite),
+        (nb_jours, limite),
     )
 
 
@@ -476,7 +478,7 @@ def dernieres_commandes(limite=5):
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
         ORDER BY c.id DESC
-        LIMIT ?
+        LIMIT %s
         """,
         (limite,),
     )
@@ -485,7 +487,7 @@ def dernieres_commandes(limite=5):
 def _somme_periode(table, colonne_date, colonne_montant, debut, fin):
     return valeur(
         f"""SELECT SUM({colonne_montant}) FROM {table}
-            WHERE date({colonne_date}) >= ? AND date({colonne_date}) < ?""",
+            WHERE DATE({colonne_date}) >= %s AND DATE({colonne_date}) < %s""",
         (debut, fin),
     )
 
@@ -519,7 +521,7 @@ def evolution_nombre(table, colonne_date, condition="1 = 1"):
     debut_precedent, fin_precedent = _bornes_mois(-1)
     requete = f"""SELECT COUNT(*) FROM {table}
                   WHERE {condition}
-                    AND date({colonne_date}) >= ? AND date({colonne_date}) < ?"""
+                    AND DATE({colonne_date}) >= %s AND DATE({colonne_date}) < %s"""
     courant = valeur(requete, (debut_courant, fin_courant))
     precedent = valeur(requete, (debut_precedent, fin_precedent))
     return calculer_pourcentage(courant, precedent)

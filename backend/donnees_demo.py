@@ -104,12 +104,13 @@ def peupler():
         return
 
     with connexion() as conn:
-        conn.executemany("INSERT INTO roles (nom) VALUES (?)", [(r,) for r in ROLES])
+        conn.executemany("INSERT INTO roles (nom) VALUES (%s)", [(r,) for r in ROLES])
         conn.executemany(
-            "INSERT INTO categories (nom, type) VALUES (?, ?)", CATEGORIES
+            "INSERT INTO categories (nom, type) VALUES (%s, %s)", CATEGORIES
         )
         conn.executemany(
-            "INSERT INTO tables_salle (numero, zone, places) VALUES (?, ?, ?)", TABLES
+            "INSERT INTO tables_salle (numero, zone, places) VALUES (%s, %s, %s)",
+            TABLES,
         )
         conn.commit()
 
@@ -129,7 +130,7 @@ def peupler():
                 """INSERT INTO articles (reference, nom, id_categorie, prix, cout_revient,
                                          gere_stock, stock, seuil_alerte, disponible,
                                          id_utilisateur)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, 1)""",
                 (
                     f"ART-{index:04d}",
                     nom,
@@ -186,7 +187,7 @@ def _generer_historique(conn, articles, nb_jours=21):
                 """INSERT INTO commandes (reference, id_table, type_service, nom_client,
                                           couverts, statut, montant_total, id_utilisateur,
                                           date_commande, date_cloture)
-                   VALUES (?, ?, 'Sur place', ?, ?, 'Payée', 0, ?, ?, ?)""",
+                   VALUES (%s, %s, 'Sur place', %s, %s, 'Payée', 0, %s, %s, %s)""",
                 (
                     reference,
                     id_table,
@@ -205,12 +206,12 @@ def _generer_historique(conn, articles, nb_jours=21):
                 conn.execute(
                     """INSERT INTO lignes_commande
                        (id_commande, id_article, quantite, prix_unitaire, total)
-                       VALUES (?, ?, ?, ?, ?)""",
+                       VALUES (%s, %s, %s, %s, %s)""",
                     (id_commande, article["id"], quantite, article["prix"], total),
                 )
 
             conn.execute(
-                "UPDATE commandes SET montant_total = ? WHERE id = ?",
+                "UPDATE commandes SET montant_total = %s WHERE id = %s",
                 (montant_total, id_commande),
             )
 
@@ -218,7 +219,7 @@ def _generer_historique(conn, articles, nb_jours=21):
             conn.execute(
                 """INSERT INTO paiements (reference, id_commande, montant, mode,
                                           id_utilisateur, date_paiement)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
                 (
                     f"PAI-{numero_paiement:04d}",
                     id_commande,
@@ -238,7 +239,7 @@ def _generer_historique(conn, articles, nb_jours=21):
         id_commande = conn.execute(
             """INSERT INTO commandes (reference, id_table, type_service, nom_client,
                                       couverts, statut, montant_total, id_utilisateur)
-               VALUES (?, ?, 'Sur place', ?, ?, ?, 0, 1)""",
+               VALUES (%s, %s, 'Sur place', %s, %s, %s, 0, 1)""",
             (
                 reference,
                 id_table,
@@ -255,16 +256,16 @@ def _generer_historique(conn, articles, nb_jours=21):
             conn.execute(
                 """INSERT INTO lignes_commande
                    (id_commande, id_article, quantite, prix_unitaire, total)
-                   VALUES (?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s)""",
                 (id_commande, article["id"], quantite, article["prix"], total),
             )
 
         conn.execute(
-            "UPDATE commandes SET montant_total = ? WHERE id = ?",
+            "UPDATE commandes SET montant_total = %s WHERE id = %s",
             (montant_total, id_commande),
         )
         conn.execute(
-            "UPDATE tables_salle SET statut = 'Occupée' WHERE id = ?", (id_table,)
+            "UPDATE tables_salle SET statut = 'Occupée' WHERE id = %s", (id_table,)
         )
 
 
@@ -302,7 +303,7 @@ def _generer_mouvements(conn):
             """INSERT INTO mouvements_stock
                (id_article, type_mouvement, quantite, stock_apres, motif,
                 id_utilisateur, date_mouvement)
-               VALUES (?, 'Entrée', ?, ?, 'Approvisionnement initial', 1, ?)""",
+               VALUES (%s, 'Entrée', %s, %s, 'Approvisionnement initial', 1, %s)""",
             (article["id"], approvisionnement, approvisionnement, debut),
         )
 
@@ -313,7 +314,7 @@ def _generer_mouvements(conn):
                 """INSERT INTO mouvements_stock
                    (id_article, type_mouvement, quantite, stock_apres, motif,
                     id_utilisateur, date_mouvement)
-                   VALUES (?, 'Sortie', ?, ?, ?, 1, ?)""",
+                   VALUES (%s, 'Sortie', %s, %s, %s, 1, %s)""",
                 (
                     article["id"],
                     ligne["quantite"],
@@ -332,7 +333,7 @@ def _generer_depenses(conn):
         conn.execute(
             """INSERT INTO depenses (reference, libelle, categorie, montant, fournisseur,
                                      mode_paiement, id_utilisateur, date_depense)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?)""",
+               VALUES (%s, %s, %s, %s, %s, %s, 1, %s)""",
             (
                 f"DEP-{index:04d}",
                 libelle,

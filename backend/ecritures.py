@@ -25,7 +25,7 @@ CATEGORIES_DEPENSE = [
 def creer_table(numero, zone, places):
     try:
         id_table = executer(
-            "INSERT INTO tables_salle (numero, zone, places) VALUES (?, ?, ?)",
+            "INSERT INTO tables_salle (numero, zone, places) VALUES (%s, %s, %s)",
             (numero, zone, int(places)),
         )
         return {"success": True, "id_table": id_table}
@@ -36,7 +36,7 @@ def creer_table(numero, zone, places):
 def changer_statut_table(id_table, statut):
     if statut not in STATUTS_TABLE:
         return {"success": False, "error": "Statut de table invalide"}
-    executer("UPDATE tables_salle SET statut = ? WHERE id = ?", (statut, id_table))
+    executer("UPDATE tables_salle SET statut = %s WHERE id = %s", (statut, id_table))
     return {"success": True}
 
 
@@ -64,7 +64,7 @@ def creer_article(
             INSERT INTO articles (reference, nom, id_categorie, prix, cout_revient,
                                   gere_stock, stock, seuil_alerte, disponible,
                                   image, id_utilisateur)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 reference,
@@ -95,7 +95,7 @@ def creer_article(
 
 def basculer_disponibilite(id_article, disponible):
     executer(
-        "UPDATE articles SET disponible = ? WHERE id = ?",
+        "UPDATE articles SET disponible = %s WHERE id = %s",
         (1 if disponible else 0, id_article),
     )
     return {"success": True}
@@ -104,7 +104,7 @@ def basculer_disponibilite(id_article, disponible):
 def creer_categorie(nom, type_categorie):
     try:
         id_categorie = executer(
-            "INSERT INTO categories (nom, type) VALUES (?, ?)", (nom, type_categorie)
+            "INSERT INTO categories (nom, type) VALUES (%s, %s)", (nom, type_categorie)
         )
         return {"success": True, "id_categorie": id_categorie}
     except Exception as erreur:
@@ -125,7 +125,7 @@ def enregistrer_mouvement(id_article, type_mouvement, quantite, motif, id_utilis
 
     with connexion() as conn:
         ligne = conn.execute(
-            "SELECT stock, gere_stock FROM articles WHERE id = ?", (id_article,)
+            "SELECT stock, gere_stock FROM articles WHERE id = %s", (id_article,)
         ).fetchone()
         if not ligne:
             return {"success": False, "error": "Article introuvable"}
@@ -142,12 +142,12 @@ def enregistrer_mouvement(id_article, type_mouvement, quantite, motif, id_utilis
                 return {"success": False, "error": "Stock insuffisant"}
 
         conn.execute(
-            "UPDATE articles SET stock = ? WHERE id = ?", (stock_apres, id_article)
+            "UPDATE articles SET stock = %s WHERE id = %s", (stock_apres, id_article)
         )
         conn.execute(
             """INSERT INTO mouvements_stock
                (id_article, type_mouvement, quantite, stock_apres, motif, id_utilisateur)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               VALUES (%s, %s, %s, %s, %s, %s)""",
             (id_article, type_mouvement, quantite, stock_apres, motif, id_utilisateur),
         )
         conn.commit()
@@ -186,7 +186,7 @@ def creer_commande(
 
             for article in articles:
                 ligne = conn.execute(
-                    "SELECT id, nom, prix, gere_stock, stock, disponible FROM articles WHERE id = ?",
+                    "SELECT id, nom, prix, gere_stock, stock, disponible FROM articles WHERE id = %s",
                     (article["id_article"],),
                 ).fetchone()
                 if not ligne:
@@ -228,7 +228,7 @@ def creer_commande(
                 INSERT INTO commandes (reference, id_table, type_service, nom_client,
                                        telephone_client, couverts, montant_total,
                                        remise, commentaire, id_utilisateur)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     reference,
@@ -248,7 +248,7 @@ def creer_commande(
                 conn.execute(
                     """INSERT INTO lignes_commande
                        (id_commande, id_article, quantite, prix_unitaire, total, note)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
                     (
                         id_commande,
                         ligne["id_article"],
@@ -262,13 +262,13 @@ def creer_commande(
                 if ligne["gere_stock"]:
                     stock_apres = ligne["stock"] - ligne["quantite"]
                     conn.execute(
-                        "UPDATE articles SET stock = ? WHERE id = ?",
+                        "UPDATE articles SET stock = %s WHERE id = %s",
                         (stock_apres, ligne["id_article"]),
                     )
                     conn.execute(
                         """INSERT INTO mouvements_stock
                            (id_article, type_mouvement, quantite, stock_apres, motif, id_utilisateur)
-                           VALUES (?, 'Sortie', ?, ?, ?, ?)""",
+                           VALUES (%s, 'Sortie', %s, %s, %s, %s)""",
                         (
                             ligne["id_article"],
                             ligne["quantite"],
@@ -280,7 +280,7 @@ def creer_commande(
 
             if id_table:
                 conn.execute(
-                    "UPDATE tables_salle SET statut = 'Occupée' WHERE id = ?",
+                    "UPDATE tables_salle SET statut = 'Occupée' WHERE id = %s",
                     (id_table,),
                 )
 
@@ -302,7 +302,7 @@ def changer_statut_commande(reference, statut):
 
     with connexion() as conn:
         commande = conn.execute(
-            "SELECT id, id_table FROM commandes WHERE reference = ?", (reference,)
+            "SELECT id, id_table FROM commandes WHERE reference = %s", (reference,)
         ).fetchone()
         if not commande:
             return {"success": False, "error": "Commande introuvable"}
@@ -310,14 +310,15 @@ def changer_statut_commande(reference, statut):
         if statut in ("Payée", "Annulée"):
             conn.execute(
                 """UPDATE commandes
-                   SET statut = ?, date_cloture = datetime('now', 'localtime')
-                   WHERE id = ?""",
+                   SET statut = %s, date_cloture = NOW()
+                   WHERE id = %s""",
                 (statut, commande["id"]),
             )
             liberer_table(conn, commande["id_table"])
         else:
             conn.execute(
-                "UPDATE commandes SET statut = ? WHERE id = ?", (statut, commande["id"])
+                "UPDATE commandes SET statut = %s WHERE id = %s",
+                (statut, commande["id"]),
             )
         conn.commit()
 
@@ -329,13 +330,13 @@ def liberer_table(conn, id_table):
     if not id_table:
         return
     encore_ouverte = conn.execute(
-        """SELECT COUNT(*) FROM commandes
-           WHERE id_table = ? AND statut IN ('En cours', 'Servie')""",
+        """SELECT COUNT(*) AS ouvertes FROM commandes
+           WHERE id_table = %s AND statut IN ('En cours', 'Servie')""",
         (id_table,),
-    ).fetchone()[0]
+    ).fetchone()["ouvertes"]
     if not encore_ouverte:
         conn.execute(
-            "UPDATE tables_salle SET statut = 'Libre' WHERE id = ?", (id_table,)
+            "UPDATE tables_salle SET statut = 'Libre' WHERE id = %s", (id_table,)
         )
 
 
@@ -360,7 +361,7 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
     try:
         with connexion() as conn:
             commande = conn.execute(
-                "SELECT id, montant_total, statut FROM commandes WHERE reference = ?",
+                "SELECT id, montant_total, statut FROM commandes WHERE reference = %s",
                 (reference_commande,),
             ).fetchone()
             if not commande:
@@ -370,9 +371,9 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
 
             deja_paye = (
                 conn.execute(
-                    "SELECT SUM(montant) FROM paiements WHERE id_commande = ?",
+                    "SELECT SUM(montant) AS total FROM paiements WHERE id_commande = %s",
                     (commande["id"],),
-                ).fetchone()[0]
+                ).fetchone()["total"]
                 or 0
             )
             reste = round(commande["montant_total"] - deja_paye, 2)
@@ -388,7 +389,7 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
             conn.execute(
                 """INSERT INTO paiements
                    (reference, id_commande, montant, mode, commentaire, id_utilisateur)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
                 (
                     reference,
                     commande["id"],
@@ -402,12 +403,12 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
             nouveau_reste = round(reste - montant, 2)
             if nouveau_reste <= 0:
                 ligne = conn.execute(
-                    "SELECT id_table FROM commandes WHERE id = ?", (commande["id"],)
+                    "SELECT id_table FROM commandes WHERE id = %s", (commande["id"],)
                 ).fetchone()
                 conn.execute(
                     """UPDATE commandes
-                       SET statut = 'Payée', date_cloture = datetime('now', 'localtime')
-                       WHERE id = ?""",
+                       SET statut = 'Payée', date_cloture = NOW()
+                       WHERE id = %s""",
                     (commande["id"],),
                 )
                 liberer_table(conn, ligne["id_table"])
@@ -460,7 +461,7 @@ def creer_depense(
                 """INSERT INTO depenses (reference, libelle, categorie, montant,
                                          fournisseur, mode_paiement, commentaire,
                                          id_utilisateur, date_depense)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (*parametres, date_depense),
             )
         else:
@@ -468,7 +469,7 @@ def creer_depense(
                 """INSERT INTO depenses (reference, libelle, categorie, montant,
                                          fournisseur, mode_paiement, commentaire,
                                          id_utilisateur)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                 tuple(parametres),
             )
 
