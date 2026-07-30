@@ -1,4 +1,3 @@
-"""Couche d'accès MySQL pour Divix Maquis."""
 
 import os
 import re
@@ -30,12 +29,11 @@ def nom_base():
 
 
 def parametres_connexion(avec_base=True):
-    """Paramètres PyMySQL lus dans l'environnement (voir .env.example)."""
+
     parametres = {
-        "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
-        "port": int(os.getenv("MYSQL_PORT", "3306")),
-        "user": os.getenv("MYSQL_USER", "root"),
-        "password": os.getenv("MYSQL_PASSWORD", ""),
+        "host": os.getenv("DB_HOST"),
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASSWORD"),
         "charset": "utf8mb4",
         "cursorclass": DictCursor,
         "autocommit": False,
@@ -49,13 +47,7 @@ def parametres_connexion(avec_base=True):
 
 
 class Connexion:
-    """Connexion MySQL gardant l'ergonomie de sqlite3 : `execute` direct, lignes-dict.
-
-    Le contexte (`with connexion() as conn:`) ferme toujours la connexion, et
-    annule la transaction si une exception a été levée. Les validations restent
-    explicites via `conn.commit()`.
-    """
-
+   
     def __init__(self, connexion_pymysql):
         self._conn = connexion_pymysql
 
@@ -95,7 +87,6 @@ def connexion():
 
 
 def _convertir(valeur_brute):
-    """Ramène les types MySQL au format que renvoyait SQLite (et que lit le front)."""
     if isinstance(valeur_brute, datetime):
         return valeur_brute.strftime("%Y-%m-%d %H:%M:%S")
     if isinstance(valeur_brute, date):
@@ -103,8 +94,7 @@ def _convertir(valeur_brute):
     if isinstance(valeur_brute, timedelta):
         return str(valeur_brute)
     if isinstance(valeur_brute, Decimal):
-        # SUM() sur une colonne entière renvoie un Decimal : on garde un entier,
-        # comme le faisait SQLite, pour que l'interface n'affiche pas « 109.0 ».
+      
         if valeur_brute == valeur_brute.to_integral_value():
             return int(valeur_brute)
         return float(valeur_brute)

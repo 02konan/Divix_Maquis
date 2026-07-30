@@ -1,7 +1,4 @@
-"""Divix Maquis — gestion de maquis et restaurant.
 
-Reprend l'interface de Divix SysPaie sur un backend métier restauration.
-"""
 
 import json
 import os

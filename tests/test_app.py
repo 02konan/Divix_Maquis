@@ -48,7 +48,7 @@ def app_maquis():
 
     _supprimer_base()
 
-    from backend.donnees_demo import peupler
+    from Divix_Maquis.donnees_demo import peupler
 
     peupler()
 

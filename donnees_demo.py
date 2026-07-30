@@ -1,13 +1,8 @@
-"""Initialise la base et y injecte un jeu de données de démonstration.
-
-Utilisation : python -m backend.donnees_demo
-"""
 
 import random
 from datetime import date, datetime, timedelta
-
 from backend.auth import creer_utilisateur
-from backend.database import connexion, initialiser_base, valeur
+from backend.database import valeur,initialiser_base,connexion
 
 ROLES = ["Gérant", "Caissier", "Serveur"]
 
