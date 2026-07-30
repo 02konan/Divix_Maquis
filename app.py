@@ -43,7 +43,6 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
-
 @login_manager.user_loader
 def charger_utilisateur(id_utilisateur):
     return User.depuis_ligne(utilisateur_par_id(int(id_utilisateur)))
@@ -71,10 +70,8 @@ def enregistrer_image(champ="image"):
     fichier.save(os.path.join(app.config["UPLOAD_FOLDER"], nom_fichier))
     return nom_fichier
 
-
 def utilisateur_courant():
     return session.get("user_id")
-
 
 def nombre(valeur_brute, defaut=0):
     try:

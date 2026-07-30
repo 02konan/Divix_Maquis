@@ -176,7 +176,6 @@ def initialiser_base():
             conn.execute(instruction)
         conn.commit()
 
-
 def generer_reference(prefixe, table):
     """Construit une référence lisible du type CMD-0001."""
     total = valeur(f"SELECT COUNT(*) FROM {table}")

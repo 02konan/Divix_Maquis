@@ -12,7 +12,6 @@ REQUETE_UTILISATEUR = """
 
 
 def authentifier(email, mot_de_passe):
-    """Renvoie l'utilisateur si les identifiants sont valides, sinon None."""
     ligne = lire_un(REQUETE_UTILISATEUR.format(condition="email = %s"), (email,))
     if not ligne or not check_password_hash(ligne["mot_de_passe"], mot_de_passe):
         return None
