@@ -48,6 +48,22 @@ Comptes de démonstration :
 > Changez ces mots de passe avant toute mise en production, et définissez `SECRET_KEY`
 > dans le fichier `.env`.
 
+## Droits par rôle
+
+| | Dashboard | Salle | Commandes | Menu | Stock | Caisse | Dépenses |
+|---|---|---|---|---|---|---|---|
+| **Gérant**   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Caissier** | — | ✓ | ✓ | — | — | ✓ | — |
+| **Serveur**  | — | ✓ | ✓ | lecture | — | — | — |
+
+La répartition se lit et se modifie dans `backend/roles.py`. Le contrôle porte sur les
+endpoints Flask, donc il couvre les pages **et** les appels de données qu'elles font :
+retirer une entrée du menu ne protège rien, l'URL reste tapable à la main. Une page
+interdite renvoie l'utilisateur sur sa page d'accueil, un appel de données répond `403`.
+
+Le menu latéral est construit à partir des pages autorisées, et chacun arrive après
+connexion sur sa première page autorisée. Un rôle absent du tableau n'a accès à rien.
+
 ## Les pages
 
 | Page          | Rôle |

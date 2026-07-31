@@ -335,3 +335,128 @@ def test_ajout_article_au_menu(client_connecte):
 
     menu = client_connecte.get("/menu/list").get_json()["data"]
     assert any(a["nom"] == "Poisson braisé test" for a in menu)
+
+
+# ----------------------------------------------------------------------------
+# DROITS PAR RÔLE
+# ----------------------------------------------------------------------------
+
+COMPTES = {
+    "Gérant": ("admin@divixmaquis.ci", "admin123"),
+    "Caissier": ("caisse@divixmaquis.ci", "caisse123"),
+    "Serveur": ("serveur@divixmaquis.ci", "serveur123"),
+}
+
+
+def _connecte_en(app_maquis, role):
+    client = app_maquis.test_client()
+    email, mot_de_passe = COMPTES[role]
+    reponse = client.post("/login", data={"email": email, "password": mot_de_passe})
+    assert reponse.get_json()["success"] is True
+    return client
+
+
+@pytest.mark.parametrize(
+    "role, autorisees, interdites",
+    [
+        ("Gérant", ["/", "/salle", "/commande", "/menu", "/stock", "/caisse", "/depense"], []),
+        ("Caissier", ["/salle", "/commande", "/caisse"], ["/", "/menu", "/stock", "/depense"]),
+        ("Serveur", ["/salle", "/commande", "/menu"], ["/", "/stock", "/caisse", "/depense"]),
+    ],
+)
+def test_pages_visibles_selon_le_role(app_maquis, role, autorisees, interdites):
+    client = _connecte_en(app_maquis, role)
+    for url in autorisees:
+        assert client.get(url).status_code == 200, url
+    for url in interdites:
+        # Une page interdite renvoie sur la page d'accueil du rôle.
+        assert client.get(url).status_code == 302, url
+
+
+@pytest.mark.parametrize(
+    "role, url",
+    [
+        ("Caissier", "/dashboard/data"),
+        ("Caissier", "/stock/list"),
+        ("Caissier", "/depense/list"),
+        ("Serveur", "/caisse/list"),
+        ("Serveur", "/caisse/encaissables"),
+        ("Serveur", "/dashboard/data"),
+    ],
+)
+def test_donnees_interdites_repondent_403(app_maquis, role, url):
+    """Masquer une page ne suffit pas : ses endpoints JSON doivent refuser aussi."""
+    reponse = _connecte_en(app_maquis, role).get(url)
+    assert reponse.status_code == 403
+    assert reponse.get_json()["success"] is False
+
+
+def test_serveur_consulte_le_menu_sans_le_modifier(app_maquis):
+    client = _connecte_en(app_maquis, "Serveur")
+    assert client.get("/menu/list").status_code == 200
+
+    refus = client.post(
+        "/menu/add", data={"nom": "X", "categorie": "1", "prix": "500", "gere_stock": "0"}
+    )
+    assert refus.status_code == 403
+    assert client.post("/menu/categorie/add", data={"nom": "Y"}).status_code == 403
+    assert client.post("/menu/1/disponibilite", data={"disponible": "0"}).status_code == 403
+
+
+def test_serveur_prend_une_commande(app_maquis):
+    """Le sélecteur d'articles reste accessible : sans lui, pas de prise de commande."""
+    client = _connecte_en(app_maquis, "Serveur")
+    articles = client.get("/menu/disponibles").get_json()["data"]
+
+    resultat = client.post(
+        "/commande/add",
+        data={
+            "type_service": "Sur place",
+            "articles": f'[{{"id_article": {articles[0]["id"]}, "quantite": 1}}]',
+        },
+    ).get_json()
+    assert resultat["success"] is True
+
+
+def test_caissier_encaisse_mais_ne_touche_pas_aux_depenses(app_maquis):
+    client = _connecte_en(app_maquis, "Caissier")
+    assert client.get("/caisse/encaissables").status_code == 200
+
+    refus = client.post(
+        "/depense/add",
+        data={"libelle": "Achat", "categorie": "Divers", "montant": "1000"},
+    )
+    assert refus.status_code == 403
+
+
+def test_menu_affiche_ne_contient_que_les_pages_autorisees(app_maquis):
+    from backend import roles
+
+    for role, pages in roles.PAGES_PAR_ROLE.items():
+        client = _connecte_en(app_maquis, role)
+        html = client.get(roles.page_accueil(role)).get_data(as_text=True)
+        for page in roles.PAGES:
+            lien = f'href="{page["url"]}"'
+            if page["cle"] in pages:
+                assert lien in html, (role, page["cle"])
+
+
+def test_tout_endpoint_est_classe(app_maquis):
+    """Un endpoint oublié serait inaccessible : la classification doit être complète."""
+    from backend import roles
+
+    connus = (
+        set(roles.PAGE_PAR_ENDPOINT)
+        | roles.ENDPOINTS_PUBLICS
+        | roles.ENDPOINTS_TOUJOURS_AUTORISES
+    )
+    declares = {regle.endpoint for regle in app_maquis.url_map.iter_rules()}
+    assert declares - connus == set()
+
+
+def test_role_inconnu_n_a_acces_a_rien(app_maquis):
+    from backend import roles
+
+    assert roles.pages_autorisees("Plongeur") == set()
+    assert roles.acces_autorise("Plongeur", "dashboard") is False
+    assert roles.acces_autorise("Plongeur", "logout") is True

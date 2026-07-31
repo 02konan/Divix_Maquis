@@ -17,7 +17,7 @@ from flask_cors import CORS
 from flask_login import LoginManager, current_user
 from werkzeug.utils import secure_filename
 
-from backend import ecritures, lectures
+from backend import ecritures, lectures, roles
 from backend.auth import authentifier, utilisateur_par_id
 from backend.database import initialiser_base
 from backend.models import User
@@ -31,7 +31,7 @@ app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 EXTENSIONS_AUTORISEES = {"png", "jpg", "jpeg", "webp"}
-ROUTES_PUBLIQUES = {"login", "static"}
+ROUTES_PUBLIQUES = roles.ENDPOINTS_PUBLICS
 
 initialiser_base()
 
@@ -46,9 +46,28 @@ def charger_utilisateur(id_utilisateur):
 
 @app.before_request
 def restreindre_acces():
+    if request.endpoint is None or request.endpoint in ROUTES_PUBLIQUES:
+        return None
+
     connecte = current_user.is_authenticated or session.get("connecte")
-    if not connecte and request.endpoint not in ROUTES_PUBLIQUES:
+    if not connecte:
         return redirect(url_for("login"))
+
+    role = session.get("user_role")
+    if roles.acces_autorise(role, request.endpoint, request.method):
+        return None
+
+    # Une page interdite renvoie l'utilisateur chez lui ; un appel de données
+    # répond en JSON, comme le reste de l'API.
+    if request.endpoint in roles.ENDPOINTS_HTML and request.method == "GET":
+        return redirect(roles.page_accueil(role))
+    return jsonify({"success": False, "error": "Accès non autorisé"}), 403
+
+
+@app.context_processor
+def injecter_menu():
+    """Le menu ne montre que les pages autorisées pour le rôle connecté."""
+    return {"nav_items": roles.menu(session.get("user_role"))}
 
 
 def extension_autorisee(nom_fichier):
@@ -111,12 +130,12 @@ def login():
             {
                 "success": True,
                 "message": "Connexion réussie! Redirection...",
-                "redirect": "/",
+                "redirect": roles.page_accueil(utilisateur["nom_role"]),
             }
         )
 
     if session.get("connecte"):
-        return redirect(url_for("dashboard"))
+        return redirect(roles.page_accueil(session.get("user_role")))
     return render_template("login.html")
 
 
