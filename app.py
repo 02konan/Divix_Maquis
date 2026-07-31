@@ -139,6 +139,7 @@ def dashboard_data():
     try:
         compteurs_salle = lectures.compteurs_salle()
         compteurs_commandes = lectures.compteurs_commandes()
+        indicateurs = lectures.indicateurs_jour()
 
         dernieres = [
             {
@@ -156,11 +157,11 @@ def dashboard_data():
             {
                 "success": True,
                 "data": {
-                    "ca_jour": lectures.chiffre_affaires_jour(),
-                    "ca_total": lectures.chiffre_affaires_total(),
+                    "ca_jour": indicateurs["ca_jour"],
+                    "ca_total": indicateurs["ca_total"],
                     "commandes_jour": compteurs_commandes["commandes_jour"],
-                    "ticket_moyen": lectures.ticket_moyen_jour(),
-                    "couverts_jour": lectures.couverts_jour(),
+                    "ticket_moyen": indicateurs["ticket_moyen"],
+                    "couverts_jour": indicateurs["couverts_jour"],
                     "tables_occupees": compteurs_salle["tables_occupees"],
                     "total_tables": compteurs_salle["total_tables"],
                     "montant_impaye": compteurs_commandes["montant_impaye"],

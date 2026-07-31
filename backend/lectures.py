@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from backend.database import lire_tout, lire_un, valeur
+from backend.database import lire_tout, lire_un
 
 # ----------------------------------------------------------------------------
 # SALLE
@@ -25,15 +25,14 @@ def liste_tables():
 
 
 def compteurs_salle():
-    return {
-        "total_tables": valeur("SELECT COUNT(*) FROM tables_salle"),
-        "tables_occupees": valeur(
-            "SELECT COUNT(*) FROM tables_salle WHERE statut = 'Occupée'"
-        ),
-        "tables_libres": valeur(
-            "SELECT COUNT(*) FROM tables_salle WHERE statut = 'Libre'"
-        ),
-    }
+    return lire_un(
+        """
+        SELECT COUNT(*) AS total_tables,
+               COALESCE(SUM(statut = 'Occupée'), 0) AS tables_occupees,
+               COALESCE(SUM(statut = 'Libre'), 0) AS tables_libres
+        FROM tables_salle
+        """
+    )
 
 
 def table_par_id(id_table):
@@ -78,17 +77,16 @@ def articles_disponibles():
 
 
 def compteurs_menu():
-    return {
-        "total_articles": valeur("SELECT COUNT(*) FROM articles"),
-        "indisponibles": valeur(
-            """SELECT COUNT(*) FROM articles
-               WHERE disponible = 0 OR (gere_stock = 1 AND stock <= 0)"""
-        ),
-        "stock_faible": valeur(
-            """SELECT COUNT(*) FROM articles
-               WHERE gere_stock = 1 AND stock > 0 AND stock <= seuil_alerte"""
-        ),
-    }
+    return lire_un(
+        """
+        SELECT COUNT(*) AS total_articles,
+               COALESCE(SUM(disponible = 0 OR (gere_stock = 1 AND stock <= 0)), 0)
+                   AS indisponibles,
+               COALESCE(SUM(gere_stock = 1 AND stock > 0 AND stock <= seuil_alerte), 0)
+                   AS stock_faible
+        FROM articles
+        """
+    )
 
 
 def statut_stock(article):
@@ -126,18 +124,17 @@ def liste_stock():
 
 
 def compteurs_stock():
-    return {
-        "articles_suivis": valeur("SELECT COUNT(*) FROM articles WHERE gere_stock = 1"),
-        "ruptures": valeur(
-            "SELECT COUNT(*) FROM articles WHERE gere_stock = 1 AND stock <= 0"
-        ),
-        "valeur_stock": round(
-            valeur(
-                "SELECT SUM(stock * cout_revient) FROM articles WHERE gere_stock = 1"
-            ),
-            2,
-        ),
-    }
+    compteurs = lire_un(
+        """
+        SELECT COUNT(*) AS articles_suivis,
+               COALESCE(SUM(stock <= 0), 0) AS ruptures,
+               COALESCE(SUM(stock * cout_revient), 0) AS valeur_stock
+        FROM articles
+        WHERE gere_stock = 1
+        """
+    )
+    compteurs["valeur_stock"] = round(compteurs["valeur_stock"], 2)
+    return compteurs
 
 
 def derniers_mouvements(limite=50):
@@ -257,25 +254,23 @@ def detail_commande(reference):
 
 
 def compteurs_commandes():
-    return {
-        "commandes_jour": valeur(
-            "SELECT COUNT(*) FROM commandes WHERE DATE(date_commande) = CURDATE()"
-        ),
-        "commandes_en_cours": valeur(
-            "SELECT COUNT(*) FROM commandes WHERE statut IN ('En cours', 'Servie')"
-        ),
-        "montant_impaye": round(
-            valeur(
-                """
-                SELECT SUM(c.montant_total - COALESCE(
-                    (SELECT SUM(p.montant) FROM paiements p WHERE p.id_commande = c.id), 0))
-                FROM commandes c
-                WHERE c.statut IN ('En cours', 'Servie')
-                """
-            ),
-            2,
-        ),
-    }
+    compteurs = lire_un(
+        """
+        SELECT
+          (SELECT COUNT(*) FROM commandes
+            WHERE date_commande >= CURDATE()
+              AND date_commande < CURDATE() + INTERVAL 1 DAY) AS commandes_jour,
+          (SELECT COUNT(*) FROM commandes
+            WHERE statut IN ('En cours', 'Servie')) AS commandes_en_cours,
+          (SELECT COALESCE(SUM(c.montant_total - COALESCE(
+                    (SELECT SUM(p.montant) FROM paiements p
+                      WHERE p.id_commande = c.id), 0)), 0)
+             FROM commandes c
+            WHERE c.statut IN ('En cours', 'Servie')) AS montant_impaye
+        """
+    )
+    compteurs["montant_impaye"] = round(compteurs["montant_impaye"], 2)
+    return compteurs
 
 
 # ----------------------------------------------------------------------------
@@ -302,20 +297,21 @@ def liste_paiements(limite=200):
 
 
 def compteurs_caisse():
-    return {
-        "encaisse_jour": round(
-            valeur(
-                """SELECT SUM(montant) FROM paiements
-                   WHERE DATE(date_paiement) = CURDATE()"""
-            ),
-            2,
-        ),
-        "encaisse_total": round(valeur("SELECT SUM(montant) FROM paiements"), 2),
-        "nb_paiements_jour": valeur(
-            """SELECT COUNT(*) FROM paiements
-               WHERE DATE(date_paiement) = CURDATE()"""
-        ),
-    }
+    compteurs = lire_un(
+        """
+        SELECT
+          (SELECT COALESCE(SUM(montant), 0) FROM paiements
+            WHERE date_paiement >= CURDATE()
+              AND date_paiement < CURDATE() + INTERVAL 1 DAY) AS encaisse_jour,
+          (SELECT COALESCE(SUM(montant), 0) FROM paiements) AS encaisse_total,
+          (SELECT COUNT(*) FROM paiements
+            WHERE date_paiement >= CURDATE()
+              AND date_paiement < CURDATE() + INTERVAL 1 DAY) AS nb_paiements_jour
+        """
+    )
+    compteurs["encaisse_jour"] = round(compteurs["encaisse_jour"], 2)
+    compteurs["encaisse_total"] = round(compteurs["encaisse_total"], 2)
+    return compteurs
 
 
 def commandes_a_encaisser():
@@ -366,27 +362,22 @@ def liste_depenses(limite=200):
 
 
 def compteurs_depenses():
-    return {
-        "depenses_jour": round(
-            valeur(
-                "SELECT SUM(montant) FROM depenses WHERE date_depense = CURDATE()"
-            ),
-            2,
-        ),
-        "depenses_mois": round(
-            valeur(
-                """SELECT SUM(montant) FROM depenses
-                   WHERE YEAR(date_depense) = YEAR(CURDATE())
-                     AND MONTH(date_depense) = MONTH(CURDATE())"""
-            ),
-            2,
-        ),
-        "nb_depenses_mois": valeur(
-            """SELECT COUNT(*) FROM depenses
-               WHERE YEAR(date_depense) = YEAR(CURDATE())
-                 AND MONTH(date_depense) = MONTH(CURDATE())"""
-        ),
-    }
+    compteurs = lire_un(
+        """
+        SELECT COALESCE(SUM(CASE WHEN date_depense = CURDATE()
+                                 THEN montant ELSE 0 END), 0) AS depenses_jour,
+               COALESCE(SUM(CASE WHEN mois_courant THEN montant ELSE 0 END), 0)
+                   AS depenses_mois,
+               COALESCE(SUM(mois_courant), 0) AS nb_depenses_mois
+        FROM (SELECT montant, date_depense,
+                     YEAR(date_depense) = YEAR(CURDATE())
+                     AND MONTH(date_depense) = MONTH(CURDATE()) AS mois_courant
+              FROM depenses) d
+        """
+    )
+    compteurs["depenses_jour"] = round(compteurs["depenses_jour"], 2)
+    compteurs["depenses_mois"] = round(compteurs["depenses_mois"], 2)
+    return compteurs
 
 
 # ----------------------------------------------------------------------------
@@ -394,37 +385,35 @@ def compteurs_depenses():
 # ----------------------------------------------------------------------------
 
 
-def chiffre_affaires_jour():
-    return round(
-        valeur(
-            """SELECT SUM(montant) FROM paiements
-               WHERE DATE(date_paiement) = CURDATE()"""
-        ),
-        2,
+def indicateurs_jour():
+    """Recette du jour, recette totale, ticket moyen et couverts, en une requête."""
+    paiements = lire_un(
+        """
+        SELECT
+          (SELECT COALESCE(SUM(montant), 0) FROM paiements
+            WHERE date_paiement >= CURDATE()
+              AND date_paiement < CURDATE() + INTERVAL 1 DAY) AS ca_jour,
+          (SELECT COALESCE(SUM(montant), 0) FROM paiements) AS ca_total
+        """
     )
-
-
-def chiffre_affaires_total():
-    return round(valeur("SELECT SUM(montant) FROM paiements"), 2)
-
-
-def ticket_moyen_jour():
-    total = valeur(
-        """SELECT SUM(montant_total) FROM commandes
-           WHERE DATE(date_commande) = CURDATE() AND statut != 'Annulée'"""
+    commandes = lire_un(
+        """
+        SELECT COALESCE(SUM(montant_total), 0) AS total_jour,
+               COUNT(*) AS nombre_jour,
+               COALESCE(SUM(couverts), 0) AS couverts_jour
+        FROM commandes
+        WHERE date_commande >= CURDATE()
+          AND date_commande < CURDATE() + INTERVAL 1 DAY
+          AND statut != 'Annulée'
+        """
     )
-    nombre = valeur(
-        """SELECT COUNT(*) FROM commandes
-           WHERE DATE(date_commande) = CURDATE() AND statut != 'Annulée'"""
-    )
-    return round(total / nombre, 2) if nombre else 0
-
-
-def couverts_jour():
-    return valeur(
-        """SELECT SUM(couverts) FROM commandes
-           WHERE DATE(date_commande) = CURDATE() AND statut != 'Annulée'"""
-    )
+    nombre = commandes["nombre_jour"]
+    return {
+        "ca_jour": round(paiements["ca_jour"], 2),
+        "ca_total": round(paiements["ca_total"], 2),
+        "ticket_moyen": round(commandes["total_jour"] / nombre, 2) if nombre else 0,
+        "couverts_jour": commandes["couverts_jour"],
+    }
 
 
 def ca_par_jour(nb_jours=7):
@@ -498,11 +487,19 @@ def dernieres_commandes(limite=5):
     )
 
 
-def _somme_periode(table, colonne_date, colonne_montant, debut, fin):
-    return valeur(
-        f"""SELECT SUM({colonne_montant}) FROM {table}
-            WHERE DATE({colonne_date}) >= %s AND DATE({colonne_date}) < %s""",
-        (debut, fin),
+def _sommes_deux_mois(table, colonne_date, colonne_montant, bornes):
+    """Somme du mois courant et du mois précédent en une seule requête."""
+    return lire_un(
+        f"""
+        SELECT COALESCE(SUM(CASE WHEN DATE({colonne_date}) >= %s
+                                  AND DATE({colonne_date}) < %s
+                                 THEN {colonne_montant} ELSE 0 END), 0) AS courant,
+               COALESCE(SUM(CASE WHEN DATE({colonne_date}) >= %s
+                                  AND DATE({colonne_date}) < %s
+                                 THEN {colonne_montant} ELSE 0 END), 0) AS precedent
+        FROM {table}
+        """,
+        bornes,
     )
 
 
@@ -516,29 +513,34 @@ def _bornes_mois(decalage=0):
     return precedent.isoformat(), premier_du_mois.isoformat()
 
 
-def evolution(table, colonne_date, colonne_montant="montant"):
-    """Variation en pourcentage entre le mois en cours et le mois précédent."""
+def _bornes_deux_mois():
     debut_courant, fin_courant = _bornes_mois(0)
     debut_precedent, fin_precedent = _bornes_mois(-1)
-    courant = _somme_periode(
-        table, colonne_date, colonne_montant, debut_courant, fin_courant
+    return (debut_courant, fin_courant, debut_precedent, fin_precedent)
+
+
+def evolution(table, colonne_date, colonne_montant="montant"):
+    """Variation en pourcentage entre le mois en cours et le mois précédent."""
+    sommes = _sommes_deux_mois(
+        table, colonne_date, colonne_montant, _bornes_deux_mois()
     )
-    precedent = _somme_periode(
-        table, colonne_date, colonne_montant, debut_precedent, fin_precedent
-    )
-    return calculer_pourcentage(courant, precedent)
+    return calculer_pourcentage(sommes["courant"], sommes["precedent"])
 
 
 def evolution_nombre(table, colonne_date, condition="1 = 1"):
     """Variation en pourcentage du nombre de lignes entre ce mois et le précédent."""
-    debut_courant, fin_courant = _bornes_mois(0)
-    debut_precedent, fin_precedent = _bornes_mois(-1)
-    requete = f"""SELECT COUNT(*) FROM {table}
-                  WHERE {condition}
-                    AND DATE({colonne_date}) >= %s AND DATE({colonne_date}) < %s"""
-    courant = valeur(requete, (debut_courant, fin_courant))
-    precedent = valeur(requete, (debut_precedent, fin_precedent))
-    return calculer_pourcentage(courant, precedent)
+    sommes = lire_un(
+        f"""
+        SELECT COALESCE(SUM(DATE({colonne_date}) >= %s
+                            AND DATE({colonne_date}) < %s), 0) AS courant,
+               COALESCE(SUM(DATE({colonne_date}) >= %s
+                            AND DATE({colonne_date}) < %s), 0) AS precedent
+        FROM {table}
+        WHERE {condition}
+        """,
+        _bornes_deux_mois(),
+    )
+    return calculer_pourcentage(sommes["courant"], sommes["precedent"])
 
 
 def calculer_pourcentage(courant, precedent):
