@@ -194,6 +194,9 @@ def valeur(sql, params=(), defaut=0):
         return defaut if premiere is None else _convertir(premiere)
 
 
+MOTIF_TABLE = re.compile(r"CREATE TABLE IF NOT EXISTS (\w+)", re.IGNORECASE)
+CODE_BASE_INCONNUE = 1049  # ER_BAD_DB_ERROR
+
 MOTIF_DOUBLON = re.compile(r"Duplicate entry '(.*)' for key")
 MOTIF_COLONNE_LONGUE = re.compile(r"Data too long for column '(\w+)'")
 
@@ -244,13 +247,38 @@ def instructions_schema():
     ]
 
 
+def _tables_manquantes(conn):
+    attendues = set(MOTIF_TABLE.findall("\n".join(instructions_schema())))
+    existantes = {
+        ligne["nom"]
+        for ligne in conn.execute(
+            """SELECT table_name AS nom FROM information_schema.tables
+               WHERE table_schema = %s""",
+            (nom_base(),),
+        ).fetchall()
+    }
+    return attendues - existantes
+
+
 def initialiser_base():
-    """Crée la base et les tables si elles n'existent pas encore."""
-    creer_base_si_absente()
+    """Crée la base et les tables si elles n'existent pas encore.
+
+    Appelée à chaque démarrage : on évite d'y rejouer tout le schéma, qui
+    coûterait une douzaine d'allers-retours à chaque réveil du service.
+    """
+    try:
+        _connexion_partagee()
+    except pymysql.err.OperationalError as erreur:
+        if erreur.args[0] != CODE_BASE_INCONNUE:
+            raise
+        creer_base_si_absente()
+
     with connexion() as conn:
-        for instruction in instructions_schema():
-            conn.execute(instruction)
-        conn.commit()
+        if _tables_manquantes(conn):
+            for instruction in instructions_schema():
+                conn.execute(instruction)
+            conn.commit()
+
 
 def generer_reference(prefixe, table):
     """Construit une référence lisible du type CMD-0001.

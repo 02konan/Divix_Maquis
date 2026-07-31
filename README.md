@@ -118,12 +118,14 @@ par le client est ignoré, et le cycle d'encaissement partiel puis total.
 
 - Renseigner `SECRET_KEY` dans `.env` et changer les mots de passe de démonstration.
 - Créer un utilisateur MySQL dédié à l'application plutôt que d'utiliser `root`.
-- Servir l'application avec gunicorn. Le `Procfile` fournit la commande utilisée par
-  les hébergeurs (Railway, Render, Heroku) :
+- Servir l'application avec gunicorn :
 
   ```
-  web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
+  gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
   ```
+
+  C'est le contenu du `Procfile`. Sur Render, cette commande se saisit aussi dans le
+  champ **Start Command** du service (Build Command : `pip install -r requirements.txt`).
 
   `0.0.0.0` et `$PORT` sont indispensables en conteneur : écouter sur `127.0.0.1` ou sur
   un port fixe rend le service invisible et l'hébergeur signale « no open ports detected ».
@@ -131,6 +133,18 @@ par le client est ignoré, et le cycle d'encaissement partiel puis total.
   s'exécute à l'import, donc une base injoignable fait échouer le worker avant qu'il
   n'ouvre le port. Les journaux distinguent les deux cas (`Worker failed to boot` suivi de
   `Can't connect to MySQL server`).
+
+### Particularités de Render
+
+- **Render n'héberge pas de MySQL managé** (Postgres et Key Value uniquement). La base
+  vit donc ailleurs : il faut autoriser les connexions distantes depuis Render côté
+  hébergeur MySQL, et renseigner `DB_PORT` s'il diffère de 3306.
+- **Une instance gratuite s'endort après 15 minutes sans trafic**, et la requête suivante
+  attend environ une minute le temps du réveil. Une page « lente à charger » de temps en
+  temps vient de là, pas de l'application.
+- **Le disque est éphémère.** Les images de plats envoyées par `/menu/add` sont écrites
+  dans `static/uploads/` et disparaissent à chaque redéploiement ou réveil du service.
+  Il faut un disque persistant, ou un stockage externe, pour les conserver.
 - Sauvegarder régulièrement la base : `mysqldump divix_maquis | gzip > sauvegarde.sql.gz`.
 - Les librairies d'interface (Bootstrap, SweetAlert2, Chart.js, Boxicons) sont chargées
   depuis des CDN, comme dans Divix SysPaie. Si le maquis a une connexion instable,

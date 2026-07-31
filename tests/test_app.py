@@ -10,10 +10,18 @@ sys.path.insert(0, str(RACINE))
 BASE_TEST = "divix_maquis_test"
 
 
+MODULES_APPLICATIFS = ("app", "donnees_demo")
+
+
 def _decharger_modules():
-    """Force la relecture de la configuration MySQL au prochain import."""
+    """Force la relecture de la configuration MySQL au prochain import.
+
+    `donnees_demo` doit en faire partie : sinon il garde une référence vers un
+    ancien module `backend.database`, dont la connexion pointe sur une base que
+    le test précédent a supprimée.
+    """
     for module in list(sys.modules):
-        if module == "app" or module.startswith("backend"):
+        if module in MODULES_APPLICATIFS or module.startswith("backend"):
             del sys.modules[module]
 
 
