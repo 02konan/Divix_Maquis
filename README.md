@@ -15,8 +15,8 @@ python -m venv .venv
 source .venv/bin/activate          # Windows : .venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env               # renseigner les identifiants MySQL
-python -m backend.donnees_demo     # crée la base + un jeu de démonstration
+# créer un fichier .env avec les variables ci-dessous
+python donnees_demo.py             # crée la base + un jeu de démonstration
 python app.py                      # http://127.0.0.1:5000
 ```
 
@@ -24,14 +24,13 @@ L'application crée elle-même la base (`CREATE DATABASE IF NOT EXISTS`) et les 
 démarrage : il suffit que le serveur MySQL soit joignable et que l'utilisateur ait le
 droit de créer une base. Connexion configurée par variables d'environnement :
 
-| Variable            | Défaut       | Rôle |
-|---------------------|--------------|------|
-| `MYSQL_HOST`        | `127.0.0.1`  | Hôte du serveur |
-| `MYSQL_PORT`        | `3306`       | Port |
-| `MYSQL_USER`        | `root`       | Utilisateur |
-| `MYSQL_PASSWORD`    | *(vide)*     | Mot de passe |
+| Variable            | Défaut         | Rôle |
+|---------------------|----------------|------|
+| `DB_HOST`           | `localhost`    | Hôte du serveur |
+| `DB_USER`           | —              | Utilisateur |
+| `DB_PASSWORD`       | *(vide)*       | Mot de passe |
 | `DATABASE`          | `divix_maquis` | Nom de la base |
-| `MYSQL_UNIX_SOCKET` | —            | Socket Unix, au lieu d'une connexion TCP |
+| `MYSQL_UNIX_SOCKET` | —              | Socket Unix, au lieu d'une connexion TCP |
 
 Comptes de démonstration :
 
@@ -42,7 +41,7 @@ Comptes de démonstration :
 | Serveur  | `serveur@divixmaquis.ci`   | `serveur123` |
 
 > Changez ces mots de passe avant toute mise en production, et définissez `SECRET_KEY`
-> dans un fichier `.env` (voir `.env.example`).
+> dans le fichier `.env`.
 
 ## Les pages
 
@@ -67,8 +66,8 @@ divix_maquis/
 │   ├── auth.py             authentification (mots de passe hachés)
 │   ├── models.py           utilisateur Flask-Login
 │   ├── lectures.py         toutes les lectures (listes, compteurs, dashboard)
-│   ├── ecritures.py        toutes les écritures (commandes, caisse, stock, dépenses)
-│   └── donnees_demo.py     initialisation + jeu de démonstration
+│   └── ecritures.py        toutes les écritures (commandes, caisse, stock, dépenses)
+├── donnees_demo.py         initialisation + jeu de démonstration
 ├── templates/              interface reprise de Divix SysPaie
 ├── static/css/             admin.css, login.css, table-mobile.css (identiques) + maquis.css
 └── static/js/              commun.js (helpers partagés) + un script par page
@@ -103,7 +102,7 @@ python -m pytest tests/
 ```
 
 Les tests créent puis suppriment une base `divix_maquis_test` sur le serveur configuré
-(les mêmes variables `MYSQL_*` qu'en développement). Si aucun serveur MySQL n'est
+(les mêmes variables `DB_*` qu'en développement). Si aucun serveur MySQL n'est
 joignable, ils sont ignorés (`skipped`) plutôt qu'en échec.
 
 Les tests couvrent l'authentification, l'accès aux pages, les endpoints JSON, la
