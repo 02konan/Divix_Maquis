@@ -17,24 +17,31 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
     CONSTRAINT fk_utilisateurs_role FOREIGN KEY (id_role) REFERENCES roles(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Numérotation des références (CMD-0001, PAI-0002, ...) : un compteur par
+-- préfixe, verrouillé le temps de l'incrément.
+CREATE TABLE IF NOT EXISTS compteurs (
+    prefixe  VARCHAR(10) NOT NULL PRIMARY KEY,
+    valeur   INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS tables_salle (
     id      INT AUTO_INCREMENT PRIMARY KEY,
-    numero  VARCHAR(20) NOT NULL UNIQUE,
-    zone    VARCHAR(50) NOT NULL DEFAULT 'Salle',
+    numero  VARCHAR(30) NOT NULL UNIQUE,
+    zone    VARCHAR(80) NOT NULL DEFAULT 'Salle',
     places  INT NOT NULL DEFAULT 4,
     statut  VARCHAR(20) NOT NULL DEFAULT 'Libre'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS categories (
     id    INT AUTO_INCREMENT PRIMARY KEY,
-    nom   VARCHAR(80) NOT NULL UNIQUE,
+    nom   VARCHAR(120) NOT NULL UNIQUE,
     type  VARCHAR(40) NOT NULL DEFAULT 'Cuisine'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS articles (
     id             INT AUTO_INCREMENT PRIMARY KEY,
     reference      VARCHAR(20) NOT NULL UNIQUE,
-    nom            VARCHAR(150) NOT NULL,
+    nom            VARCHAR(255) NOT NULL,
     id_categorie   INT NULL,
     prix           DOUBLE NOT NULL DEFAULT 0,
     cout_revient   DOUBLE NOT NULL DEFAULT 0,
@@ -54,8 +61,8 @@ CREATE TABLE IF NOT EXISTS commandes (
     reference        VARCHAR(20) NOT NULL UNIQUE,
     id_table         INT NULL,
     type_service     VARCHAR(20) NOT NULL DEFAULT 'Sur place',
-    nom_client       VARCHAR(120) NULL,
-    telephone_client VARCHAR(30) NULL,
+    nom_client       VARCHAR(255) NULL,
+    telephone_client VARCHAR(40) NULL,
     couverts         INT NOT NULL DEFAULT 1,
     statut           VARCHAR(20) NOT NULL DEFAULT 'En cours',
     montant_total    DOUBLE NOT NULL DEFAULT 0,
@@ -103,7 +110,7 @@ CREATE TABLE IF NOT EXISTS mouvements_stock (
     type_mouvement VARCHAR(20) NOT NULL,
     quantite       INT NOT NULL,
     stock_apres    INT NOT NULL,
-    motif          VARCHAR(190) NULL,
+    motif          VARCHAR(255) NULL,
     id_utilisateur INT NULL,
     date_mouvement DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_mouvements_date (date_mouvement),
@@ -114,10 +121,10 @@ CREATE TABLE IF NOT EXISTS mouvements_stock (
 CREATE TABLE IF NOT EXISTS depenses (
     id             INT AUTO_INCREMENT PRIMARY KEY,
     reference      VARCHAR(20) NOT NULL UNIQUE,
-    libelle        VARCHAR(190) NOT NULL,
+    libelle        VARCHAR(255) NOT NULL,
     categorie      VARCHAR(60) NOT NULL,
     montant        DOUBLE NOT NULL,
-    fournisseur    VARCHAR(150) NULL,
+    fournisseur    VARCHAR(255) NULL,
     mode_paiement  VARCHAR(40) NULL,
     commentaire    TEXT NULL,
     id_utilisateur INT NULL,

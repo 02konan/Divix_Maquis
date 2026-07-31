@@ -57,6 +57,9 @@ def app_maquis():
     app.config.update(TESTING=True, SECRET_KEY="test")
     yield app
 
+    from backend.database import fermer_connexion
+
+    fermer_connexion()
     _supprimer_base()
     os.environ.pop("DATABASE", None)
 
@@ -259,6 +262,55 @@ def test_ajout_depense(client_connecte):
 
     depenses = client_connecte.get("/depense/list").get_json()["data"]
     assert any(d["libelle"] == "Achat charbon" for d in depenses)
+
+
+def _en_parallele(action, nb_fils):
+    """Lance `action` dans plusieurs fils libérés au même instant."""
+    import threading
+
+    resultats = []
+    verrou = threading.Lock()
+    depart = threading.Barrier(nb_fils)
+
+    def executer_action():
+        depart.wait()
+        resultat = action()
+        with verrou:
+            resultats.append(resultat)
+
+    fils = [threading.Thread(target=executer_action) for _ in range(nb_fils)]
+    for fil in fils:
+        fil.start()
+    for fil in fils:
+        fil.join()
+    return resultats
+
+
+def test_references_uniques_en_simultane(app_maquis):
+    """Deux commandes prises au même instant ne peuvent pas porter la même référence."""
+    from backend.database import generer_reference
+
+    references = _en_parallele(lambda: generer_reference("CMD", "commandes"), 20)
+
+    assert len(references) == 20
+    assert len(set(references)) == 20
+
+
+def test_stock_sans_mise_a_jour_perdue(app_maquis):
+    """Des mouvements de stock simultanés s'additionnent tous, aucun n'est écrasé."""
+    from backend import ecritures
+    from backend.database import valeur
+
+    id_article = 13
+    avant = valeur("SELECT stock FROM articles WHERE id = %s", (id_article,))
+
+    resultats = _en_parallele(
+        lambda: ecritures.enregistrer_mouvement(id_article, "Entrée", 1, "test", 1), 20
+    )
+
+    assert all(resultat["success"] for resultat in resultats)
+    assert valeur("SELECT stock FROM articles WHERE id = %s", (id_article,)) == avant + 20
+    assert valeur("SELECT COUNT(*) FROM mouvements_stock WHERE motif = 'test'") == 20
 
 
 def test_ajout_article_au_menu(client_connecte):

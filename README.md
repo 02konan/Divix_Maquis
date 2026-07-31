@@ -84,7 +84,13 @@ Deux règles structurent le backend :
 ## Modèle de données
 
 `roles`, `utilisateurs`, `tables_salle`, `categories`, `articles`, `commandes`,
-`lignes_commande`, `paiements`, `mouvements_stock`, `depenses`.
+`lignes_commande`, `paiements`, `mouvements_stock`, `depenses`, `compteurs`.
+
+`compteurs` porte la numérotation des références (`CMD-0001`, `PAI-0002`, ...) :
+le numéro est attribué sous verrou, sinon deux commandes prises au même instant
+reçoivent la même référence et l'une des deux est refusée. Pour la même raison,
+la lecture du stock d'un article et celle du reste à payer d'un ticket se font
+en `SELECT ... FOR UPDATE`.
 
 Un article porte un indicateur `gere_stock` : les boissons sont décomptées à la vente,
 les plats sont préparés à la commande et ne consomment pas de stock.

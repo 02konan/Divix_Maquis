@@ -1,6 +1,11 @@
 """Toutes les écritures : commandes, encaissements, menu, stock, dépenses."""
 
-from backend.database import connexion, executer, generer_reference
+from backend.database import (
+    connexion,
+    executer,
+    generer_reference,
+    message_erreur,
+)
 
 MODES_PAIEMENT = ["Espèces", "Orange Money", "MTN MoMo", "Moov Money", "Wave", "Carte"]
 TYPES_SERVICE = ["Sur place", "À emporter", "Livraison"]
@@ -30,14 +35,17 @@ def creer_table(numero, zone, places):
         )
         return {"success": True, "id_table": id_table}
     except Exception as erreur:
-        return {"success": False, "error": str(erreur)}
+        return {"success": False, "error": message_erreur(erreur)}
 
 
 def changer_statut_table(id_table, statut):
     if statut not in STATUTS_TABLE:
         return {"success": False, "error": "Statut de table invalide"}
-    executer("UPDATE tables_salle SET statut = %s WHERE id = %s", (statut, id_table))
-    return {"success": True}
+    try:
+        executer("UPDATE tables_salle SET statut = %s WHERE id = %s", (statut, id_table))
+        return {"success": True}
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
 
 
 # ----------------------------------------------------------------------------
@@ -90,15 +98,18 @@ def creer_article(
             )
         return {"success": True, "id_article": id_article, "reference": reference}
     except Exception as erreur:
-        return {"success": False, "error": str(erreur)}
+        return {"success": False, "error": message_erreur(erreur)}
 
 
 def basculer_disponibilite(id_article, disponible):
-    executer(
-        "UPDATE articles SET disponible = %s WHERE id = %s",
-        (1 if disponible else 0, id_article),
-    )
-    return {"success": True}
+    try:
+        executer(
+            "UPDATE articles SET disponible = %s WHERE id = %s",
+            (1 if disponible else 0, id_article),
+        )
+        return {"success": True}
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
 
 
 def creer_categorie(nom, type_categorie):
@@ -108,7 +119,7 @@ def creer_categorie(nom, type_categorie):
         )
         return {"success": True, "id_categorie": id_categorie}
     except Exception as erreur:
-        return {"success": False, "error": str(erreur)}
+        return {"success": False, "error": message_erreur(erreur)}
 
 
 # ----------------------------------------------------------------------------
@@ -123,34 +134,50 @@ def enregistrer_mouvement(id_article, type_mouvement, quantite, motif, id_utilis
     if quantite < 0 or (quantite == 0 and type_mouvement != "Inventaire"):
         return {"success": False, "error": "La quantité doit être supérieure à zéro"}
 
-    with connexion() as conn:
-        ligne = conn.execute(
-            "SELECT stock, gere_stock FROM articles WHERE id = %s", (id_article,)
-        ).fetchone()
-        if not ligne:
-            return {"success": False, "error": "Article introuvable"}
-        if not ligne["gere_stock"]:
-            return {"success": False, "error": "Cet article ne suit pas de stock"}
+    try:
+        with connexion() as conn:
+            # FOR UPDATE : sans verrou, deux mouvements simultanés lisent le même
+            # stock de départ et l'un des deux écrase la mise à jour de l'autre.
+            ligne = conn.execute(
+                """SELECT stock, gere_stock FROM articles
+                   WHERE id = %s FOR UPDATE""",
+                (id_article,),
+            ).fetchone()
+            if not ligne:
+                return {"success": False, "error": "Article introuvable"}
+            if not ligne["gere_stock"]:
+                return {"success": False, "error": "Cet article ne suit pas de stock"}
 
-        if type_mouvement == "Entrée":
-            stock_apres = ligne["stock"] + quantite
-        elif type_mouvement == "Inventaire":
-            stock_apres = quantite
-        else:  # Sortie ou Perte
-            stock_apres = ligne["stock"] - quantite
-            if stock_apres < 0:
-                return {"success": False, "error": "Stock insuffisant"}
+            if type_mouvement == "Entrée":
+                stock_apres = ligne["stock"] + quantite
+            elif type_mouvement == "Inventaire":
+                stock_apres = quantite
+            else:  # Sortie ou Perte
+                stock_apres = ligne["stock"] - quantite
+                if stock_apres < 0:
+                    return {"success": False, "error": "Stock insuffisant"}
 
-        conn.execute(
-            "UPDATE articles SET stock = %s WHERE id = %s", (stock_apres, id_article)
-        )
-        conn.execute(
-            """INSERT INTO mouvements_stock
-               (id_article, type_mouvement, quantite, stock_apres, motif, id_utilisateur)
-               VALUES (%s, %s, %s, %s, %s, %s)""",
-            (id_article, type_mouvement, quantite, stock_apres, motif, id_utilisateur),
-        )
-        conn.commit()
+            conn.execute(
+                "UPDATE articles SET stock = %s WHERE id = %s",
+                (stock_apres, id_article),
+            )
+            conn.execute(
+                """INSERT INTO mouvements_stock
+                   (id_article, type_mouvement, quantite, stock_apres, motif,
+                    id_utilisateur)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (
+                    id_article,
+                    type_mouvement,
+                    quantite,
+                    stock_apres,
+                    motif,
+                    id_utilisateur,
+                ),
+            )
+            conn.commit()
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
 
     return {"success": True, "stock_apres": stock_apres}
 
@@ -158,6 +185,20 @@ def enregistrer_mouvement(id_article, type_mouvement, quantite, motif, id_utilis
 # ----------------------------------------------------------------------------
 # COMMANDES
 # ----------------------------------------------------------------------------
+
+
+def verrouiller_articles(conn, articles):
+    """Verrouille les articles d'une commande, toujours dans l'ordre des id.
+
+    Sans ordre stable, deux commandes portant sur les mêmes articles saisis dans
+    un ordre différent peuvent se bloquer mutuellement (interblocage InnoDB).
+    """
+    ids = sorted({int(article["id_article"]) for article in articles})
+    marqueurs = ", ".join(["%s"] * len(ids))
+    conn.execute(
+        f"SELECT id FROM articles WHERE id IN ({marqueurs}) ORDER BY id FOR UPDATE",
+        tuple(ids),
+    )
 
 
 def creer_commande(
@@ -181,12 +222,14 @@ def creer_commande(
 
     try:
         with connexion() as conn:
+            verrouiller_articles(conn, articles)
             montant_total = 0
             lignes = []
 
             for article in articles:
                 ligne = conn.execute(
-                    "SELECT id, nom, prix, gere_stock, stock, disponible FROM articles WHERE id = %s",
+                    """SELECT id, nom, prix, gere_stock, stock, disponible
+                       FROM articles WHERE id = %s FOR UPDATE""",
                     (article["id_article"],),
                 ).fetchone()
                 if not ligne:
@@ -293,34 +336,37 @@ def creer_commande(
             "montant_total": montant_total,
         }
     except Exception as erreur:
-        return {"success": False, "error": str(erreur)}
+        return {"success": False, "error": message_erreur(erreur)}
 
 
 def changer_statut_commande(reference, statut):
     if statut not in STATUTS_COMMANDE:
         return {"success": False, "error": "Statut de commande invalide"}
 
-    with connexion() as conn:
-        commande = conn.execute(
-            "SELECT id, id_table FROM commandes WHERE reference = %s", (reference,)
-        ).fetchone()
-        if not commande:
-            return {"success": False, "error": "Commande introuvable"}
+    try:
+        with connexion() as conn:
+            commande = conn.execute(
+                "SELECT id, id_table FROM commandes WHERE reference = %s", (reference,)
+            ).fetchone()
+            if not commande:
+                return {"success": False, "error": "Commande introuvable"}
 
-        if statut in ("Payée", "Annulée"):
-            conn.execute(
-                """UPDATE commandes
-                   SET statut = %s, date_cloture = NOW()
-                   WHERE id = %s""",
-                (statut, commande["id"]),
-            )
-            liberer_table(conn, commande["id_table"])
-        else:
-            conn.execute(
-                "UPDATE commandes SET statut = %s WHERE id = %s",
-                (statut, commande["id"]),
-            )
-        conn.commit()
+            if statut in ("Payée", "Annulée"):
+                conn.execute(
+                    """UPDATE commandes
+                       SET statut = %s, date_cloture = NOW()
+                       WHERE id = %s""",
+                    (statut, commande["id"]),
+                )
+                liberer_table(conn, commande["id_table"])
+            else:
+                conn.execute(
+                    "UPDATE commandes SET statut = %s WHERE id = %s",
+                    (statut, commande["id"]),
+                )
+            conn.commit()
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
 
     return {"success": True}
 
@@ -360,8 +406,11 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
 
     try:
         with connexion() as conn:
+            # FOR UPDATE : deux encaissements simultanés sur le même ticket
+            # liraient le même reste à payer et pourraient le dépasser.
             commande = conn.execute(
-                "SELECT id, montant_total, statut FROM commandes WHERE reference = %s",
+                """SELECT id, montant_total, statut FROM commandes
+                   WHERE reference = %s FOR UPDATE""",
                 (reference_commande,),
             ).fetchone()
             if not commande:
@@ -421,7 +470,7 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
             "reste_a_payer": max(nouveau_reste, 0),
         }
     except Exception as erreur:
-        return {"success": False, "error": str(erreur)}
+        return {"success": False, "error": message_erreur(erreur)}
 
 
 # ----------------------------------------------------------------------------
@@ -475,4 +524,4 @@ def creer_depense(
 
         return {"success": True, "reference": reference}
     except Exception as erreur:
-        return {"success": False, "error": str(erreur)}
+        return {"success": False, "error": message_erreur(erreur)}

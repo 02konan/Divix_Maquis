@@ -179,26 +179,40 @@ def liste_commandes(limite=200):
         """,
         (limite,),
     )
+    resumes = resumes_articles([commande["id"] for commande in commandes])
     for commande in commandes:
         commande["reste_a_payer"] = round(
             max(commande["montant_total"] - commande["total_paye"], 0), 2
         )
-        commande["articles"] = resume_articles(commande["id"])
+        commande["articles"] = resumes.get(commande["id"], "")
     return commandes
 
 
-def resume_articles(id_commande):
+def resumes_articles(ids_commande):
+    """Résumé « 2x Attiéké, 1x Alloco » de plusieurs commandes, en une seule requête."""
+    if not ids_commande:
+        return {}
+
+    marqueurs = ", ".join(["%s"] * len(ids_commande))
     lignes = lire_tout(
-        """
-        SELECT a.nom, l.quantite
+        f"""
+        SELECT l.id_commande, a.nom, l.quantite
         FROM lignes_commande l
         JOIN articles a ON l.id_article = a.id
-        WHERE l.id_commande = %s
+        WHERE l.id_commande IN ({marqueurs})
         ORDER BY l.id
         """,
-        (id_commande,),
+        tuple(ids_commande),
     )
-    return ", ".join(f"{ligne['quantite']}x {ligne['nom']}" for ligne in lignes)
+
+    resumes = {}
+    for ligne in lignes:
+        resumes.setdefault(ligne["id_commande"], []).append(
+            f"{ligne['quantite']}x {ligne['nom']}"
+        )
+    return {
+        id_commande: ", ".join(articles) for id_commande, articles in resumes.items()
+    }
 
 
 def detail_commande(reference):
