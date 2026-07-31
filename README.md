@@ -20,6 +20,9 @@ python donnees_demo.py             # crée la base + un jeu de démonstration
 python app.py                      # http://127.0.0.1:5000
 ```
 
+Pour le rechargement automatique pendant le développement : `FLASK_DEBUG=1 python app.py`
+(le mode debug est désactivé par défaut, il ouvrirait une console d'exécution à distance).
+
 L'application crée elle-même la base (`CREATE DATABASE IF NOT EXISTS`) et les tables au
 démarrage : il suffit que le serveur MySQL soit joignable et que l'utilisateur ait le
 droit de créer une base. Connexion configurée par variables d'environnement :
@@ -27,10 +30,12 @@ droit de créer une base. Connexion configurée par variables d'environnement :
 | Variable            | Défaut         | Rôle |
 |---------------------|----------------|------|
 | `DB_HOST`           | `localhost`    | Hôte du serveur |
+| `DB_PORT`           | `3306`         | Port (un MySQL managé n'écoute pas toujours sur 3306) |
 | `DB_USER`           | —              | Utilisateur |
 | `DB_PASSWORD`       | *(vide)*       | Mot de passe |
 | `DATABASE`          | `divix_maquis` | Nom de la base |
 | `MYSQL_UNIX_SOCKET` | —              | Socket Unix, au lieu d'une connexion TCP |
+| `PORT`              | `5000`         | Port d'écoute de l'application |
 
 Comptes de démonstration :
 
@@ -113,7 +118,19 @@ par le client est ignoré, et le cycle d'encaissement partiel puis total.
 
 - Renseigner `SECRET_KEY` dans `.env` et changer les mots de passe de démonstration.
 - Créer un utilisateur MySQL dédié à l'application plutôt que d'utiliser `root`.
-- Servir l'application avec `gunicorn app:app` derrière un reverse proxy.
+- Servir l'application avec gunicorn. Le `Procfile` fournit la commande utilisée par
+  les hébergeurs (Railway, Render, Heroku) :
+
+  ```
+  web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
+  ```
+
+  `0.0.0.0` et `$PORT` sont indispensables en conteneur : écouter sur `127.0.0.1` ou sur
+  un port fixe rend le service invisible et l'hébergeur signale « no open ports detected ».
+  Le même message apparaît si l'application ne démarre pas du tout : `initialiser_base()`
+  s'exécute à l'import, donc une base injoignable fait échouer le worker avant qu'il
+  n'ouvre le port. Les journaux distinguent les deux cas (`Worker failed to boot` suivi de
+  `Can't connect to MySQL server`).
 - Sauvegarder régulièrement la base : `mysqldump divix_maquis | gzip > sauvegarde.sql.gz`.
 - Les librairies d'interface (Bootstrap, SweetAlert2, Chart.js, Boxicons) sont chargées
   depuis des CDN, comme dans Divix SysPaie. Si le maquis a une connexion instable,

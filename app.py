@@ -510,4 +510,10 @@ def depense_add():
 
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    # 0.0.0.0 et PORT : en conteneur, écouter sur 127.0.0.1 rend le service
+    # invisible de l'extérieur et l'hébergeur ne détecte aucun port ouvert.
+    app.run(
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "5000")),
+        debug=os.getenv("FLASK_DEBUG") == "1",
+    )

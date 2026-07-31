@@ -34,6 +34,8 @@ def parametres_connexion(avec_base=True):
 
     parametres = {
         "host": os.getenv("DB_HOST"),
+        # Un MySQL managé n'écoute pas forcément sur 3306.
+        "port": int(os.getenv("DB_PORT") or 3306),
         "user": os.getenv("DB_USER"),
         "password": os.getenv("DB_PASSWORD"),
         "charset": "utf8mb4",
