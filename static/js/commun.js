@@ -103,6 +103,7 @@ const Divix = {
     /* ------------------------------------------------------------------ */
 
     animerNombre(element, cible, duree = 900) {
+        if (!element) return;   // la carte peut être masquée par un module désactivé
         const depart = 0;
         let debut = null;
         const etape = (horodatage) => {

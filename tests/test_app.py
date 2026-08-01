@@ -460,3 +460,116 @@ def test_role_inconnu_n_a_acces_a_rien(app_maquis):
     assert roles.pages_autorisees("Plongeur") == set()
     assert roles.acces_autorise("Plongeur", "dashboard") is False
     assert roles.acces_autorise("Plongeur", "logout") is True
+
+
+# ----------------------------------------------------------------------------
+# FONCTIONNALITÉS ACTIVABLES
+# ----------------------------------------------------------------------------
+
+
+def _desactiver(client, cle):
+    reponse = client.post(
+        "/administration/modules", data={"cle": cle, "actif": "0"}
+    ).get_json()
+    assert reponse["success"] is True
+    return reponse
+
+
+def test_administration_reservee_au_gerant(app_maquis):
+    assert _connecte_en(app_maquis, "Gérant").get("/administration").status_code == 200
+
+    for role in ("Caissier", "Serveur"):
+        client = _connecte_en(app_maquis, role)
+        assert client.get("/administration").status_code == 302
+        refus = client.post(
+            "/administration/modules", data={"cle": "salle", "actif": "0"}
+        )
+        assert refus.status_code == 403
+
+
+def test_salle_desactivee_ferme_pages_et_donnees(app_maquis):
+    client = _connecte_en(app_maquis, "Gérant")
+    _desactiver(client, "salle")
+
+    assert client.get("/salle").status_code == 302
+    refus = client.get("/salle/list")
+    assert refus.status_code == 403
+    assert refus.get_json()["error"] == "Fonctionnalité désactivée"
+    assert client.post("/salle/add", data={"numero": "99"}).status_code == 403
+
+    # Elle disparaît du menu, y compris pour les autres utilisateurs.
+    for role in ("Gérant", "Serveur"):
+        html = _connecte_en(app_maquis, role).get("/commande").get_data(as_text=True)
+        assert 'href="/salle"' not in html
+
+
+def test_salle_desactivee_retire_le_choix_de_table(app_maquis):
+    client = _connecte_en(app_maquis, "Gérant")
+    assert 'id="idTable"' in client.get("/commande").get_data(as_text=True)
+
+    _desactiver(client, "salle")
+    assert 'id="idTable"' not in client.get("/commande").get_data(as_text=True)
+
+
+def test_salle_desactivee_ignore_la_table_envoyee(app_maquis):
+    """Un formulaire forgé ne doit pas rattacher une commande à une table."""
+    client = _connecte_en(app_maquis, "Gérant")
+    _desactiver(client, "salle")
+
+    article = client.get("/menu/disponibles").get_json()["data"][0]
+    creation = client.post(
+        "/commande/add",
+        data={
+            "type_service": "À emporter",
+            "id_table": "2",
+            "articles": f'[{{"id_article": {article["id"]}, "quantite": 1}}]',
+        },
+    ).get_json()
+    assert creation["success"] is True
+
+    detail = client.get(f"/commande/{creation['reference']}").get_json()["data"]
+    assert detail["id_table"] is None
+
+
+def test_module_indispensable_reste_actif(app_maquis):
+    from backend import modules
+
+    client = _connecte_en(app_maquis, "Gérant")
+    for cle in modules.OBLIGATOIRES:
+        refus = client.post(
+            "/administration/modules", data={"cle": cle, "actif": "0"}
+        )
+        assert refus.status_code == 400
+        assert "ne peut pas être désactivé" in refus.get_json()["error"]
+        assert client.get("/caisse").status_code == 200
+
+
+def test_module_inconnu_refuse(app_maquis):
+    refus = _connecte_en(app_maquis, "Gérant").post(
+        "/administration/modules", data={"cle": "karaoke", "actif": "1"}
+    )
+    assert refus.status_code == 400
+
+
+def test_reactivation_reouvre_la_fonctionnalite(app_maquis):
+    client = _connecte_en(app_maquis, "Gérant")
+    _desactiver(client, "stock")
+    assert client.get("/stock/list").status_code == 403
+
+    client.post("/administration/modules", data={"cle": "stock", "actif": "1"})
+    assert client.get("/stock/list").status_code == 200
+    assert 'href="/stock"' in client.get("/stock").get_data(as_text=True)
+
+
+def test_module_absent_de_la_base_garde_sa_valeur_par_defaut(app_maquis):
+    """Une fonctionnalité ajoutée plus tard fonctionne avant sa création en base."""
+    from backend import modules
+    from backend.database import executer
+
+    executer("DELETE FROM modules WHERE cle = %s", ("depense",))
+    modules.invalider_cache()
+    assert modules.actif("depense") is True
+
+    modules.initialiser()
+    assert modules.actif("depense") is True
+

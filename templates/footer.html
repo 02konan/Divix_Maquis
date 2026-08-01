@@ -22,5 +22,8 @@
     {% if active_page == 'depense' %}
     <script src="{{ url_for('static', filename='js/depenses.js') }}" defer></script>
     {% endif %}
+    {% if active_page == 'administration' %}
+    <script src="{{ url_for('static', filename='js/administration.js') }}" defer></script>
+    {% endif %}
 </body>
 </html>

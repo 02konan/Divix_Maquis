@@ -63,11 +63,20 @@
                                 <path d="M6.17 21H2.84c-.46 0-.83-.45-.83-1v-7c0-.55.37-1 .83-1h3.33c.46 0 .83.45.83 1v7c0 .55-.37 1-.83 1"></path><rect width="5" height="18" x="9.5" y="3" rx="1" ry="1"></rect><path d="M21.17 21h-3.33c-.46 0-.83-.45-.83-1V9c0-.55.37-1 .83-1h3.33c.46 0 .83.45.83 1v11c0 .55-.37 1-.83 1"></path>
                             </svg>
                         </div>
-                        <span class="small text-muted">Tables occupées</span>
+                        {# Sans gestion de salle, la carte affiche ce qui reste à encaisser. #}
+                        <span class="small text-muted">
+                            {% if 'salle' in modules_actifs %}Tables occupées{% else %}Reste à encaisser{% endif %}
+                        </span>
                     </div>
+                    {% if 'salle' in modules_actifs %}
                     <span class="ms-auto badge badge-pending" id="impaye-jour"></span>
+                    {% endif %}
                 </div>
+                {% if 'salle' in modules_actifs %}
                 <h1 class="mt-2"><span id="tables-occupees"></span><span class="small franc text-muted" id="total-tables"></span></h1>
+                {% else %}
+                <h1 class="mt-2"><span id="impaye-total"></span><span class="small franc text-muted"> FCFA</span></h1>
+                {% endif %}
             </div>
         </div>
     </div>

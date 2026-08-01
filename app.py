@@ -17,7 +17,7 @@ from flask_cors import CORS
 from flask_login import LoginManager, current_user
 from werkzeug.utils import secure_filename
 
-from backend import ecritures, lectures, roles
+from backend import ecritures, lectures, modules, roles
 from backend.auth import authentifier, utilisateur_par_id
 from backend.database import initialiser_base
 from backend.models import User
@@ -34,6 +34,7 @@ EXTENSIONS_AUTORISEES = {"png", "jpg", "jpeg", "webp"}
 ROUTES_PUBLIQUES = roles.ENDPOINTS_PUBLICS
 
 initialiser_base()
+modules.initialiser()
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -54,20 +55,41 @@ def restreindre_acces():
         return redirect(url_for("login"))
 
     role = session.get("user_role")
-    if roles.acces_autorise(role, request.endpoint, request.method):
+    page = roles.PAGE_PAR_ENDPOINT.get(request.endpoint)
+    autorise = roles.acces_autorise(role, request.endpoint, request.method)
+    if autorise and modules.actif(page):
         return None
 
-    # Une page interdite renvoie l'utilisateur chez lui ; un appel de données
-    # répond en JSON, comme le reste de l'API.
+    # Une page interdite ou désactivée renvoie l'utilisateur chez lui ; un appel
+    # de données répond en JSON, comme le reste de l'API.
     if request.endpoint in roles.ENDPOINTS_HTML and request.method == "GET":
-        return redirect(roles.page_accueil(role))
-    return jsonify({"success": False, "error": "Accès non autorisé"}), 403
+        return redirect(page_accueil(role))
+    message = (
+        "Accès non autorisé" if autorise is False else "Fonctionnalité désactivée"
+    )
+    return jsonify({"success": False, "error": message}), 403
 
 
 @app.context_processor
-def injecter_menu():
-    """Le menu ne montre que les pages autorisées pour le rôle connecté."""
-    return {"nav_items": roles.menu(session.get("user_role"))}
+def injecter_contexte():
+    """Le menu ne montre que les pages autorisées ET activées."""
+    actifs = modules.actifs()
+    return {
+        "nav_items": [
+            page
+            for page in roles.menu(session.get("user_role"))
+            if page["cle"] not in modules.CLES or page["cle"] in actifs
+        ],
+        "modules_actifs": actifs,
+    }
+
+
+def page_accueil(role):
+    """Première page à la fois autorisée pour le rôle et activée."""
+    for page in roles.menu(role):
+        if modules.actif(page["cle"]):
+            return page["url"]
+    return "/logout"
 
 
 def extension_autorisee(nom_fichier):
@@ -130,12 +152,12 @@ def login():
             {
                 "success": True,
                 "message": "Connexion réussie! Redirection...",
-                "redirect": roles.page_accueil(utilisateur["nom_role"]),
+                "redirect": page_accueil(utilisateur["nom_role"]),
             }
         )
 
     if session.get("connecte"):
-        return redirect(roles.page_accueil(session.get("user_role")))
+        return redirect(page_accueil(session.get("user_role")))
     return render_template("login.html")
 
 
@@ -156,7 +178,12 @@ def dashboard():
 @app.route("/dashboard/data")
 def dashboard_data():
     try:
-        compteurs_salle = lectures.compteurs_salle()
+        salle_active = modules.actif("salle")
+        compteurs_salle = (
+            lectures.compteurs_salle()
+            if salle_active
+            else {"tables_occupees": 0, "total_tables": 0}
+        )
         compteurs_commandes = lectures.compteurs_commandes()
         indicateurs = lectures.indicateurs_jour()
 
@@ -184,6 +211,7 @@ def dashboard_data():
                     "tables_occupees": compteurs_salle["tables_occupees"],
                     "total_tables": compteurs_salle["total_tables"],
                     "montant_impaye": compteurs_commandes["montant_impaye"],
+                    "salle_active": salle_active,
                     "ca_par_jour": lectures.ca_par_jour(7),
                     "top_articles": lectures.top_articles(5),
                     "dernieres_commandes": dernieres,
@@ -363,7 +391,7 @@ def commande():
     return render_template(
         "commandes.html",
         active_page="commande",
-        tables=lectures.liste_tables(),
+        tables=lectures.liste_tables() if modules.actif("salle") else [],
         types_service=ecritures.TYPES_SERVICE,
     )
 
@@ -394,7 +422,9 @@ def commande_add():
 
     resultat = ecritures.creer_commande(
         id_utilisateur=utilisateur_courant(),
-        id_table=request.form.get("id_table") or None,
+        id_table=(request.form.get("id_table") or None)
+        if modules.actif("salle")
+        else None,
         type_service=request.form.get("type_service") or "Sur place",
         nom_client=request.form.get("nom_client"),
         telephone_client=request.form.get("telephone_client"),
@@ -526,6 +556,29 @@ def depense_add():
     if not resultat["success"]:
         return jsonify(resultat), 400
     return jsonify({**resultat, "message": "Dépense enregistrée"})
+
+
+# =============================== ADMINISTRATION ===============================
+
+
+@app.route("/administration")
+def administration():
+    return render_template(
+        "administration.html", active_page="administration", modules=modules.liste()
+    )
+
+
+@app.route("/administration/modules", methods=["POST"])
+def administration_modules():
+    cle = request.form.get("cle")
+    actif = request.form.get("actif") == "1"
+
+    resultat = modules.basculer(cle, actif)
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+
+    etat = "activée" if actif else "désactivée"
+    return jsonify({**resultat, "message": f"Fonctionnalité {etat}"})
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if 'salle' in modules_actifs %}
                     <div class="col mb-3">
                         <label for="idTable" class="form-label">Table</label>
                         <select class="form-select" id="idTable" name="id_table">
@@ -41,6 +42,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% endif %}
                     <div class="col-3 mb-3">
                         <label for="couverts" class="form-label">Couverts</label>
                         <input type="number" class="form-control" id="couverts" name="couverts" value="1" min="1">

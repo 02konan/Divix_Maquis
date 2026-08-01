@@ -48,11 +48,36 @@ Comptes de démonstration :
 > Changez ces mots de passe avant toute mise en production, et définissez `SECRET_KEY`
 > dans le fichier `.env`.
 
+## Fonctionnalités activables
+
+Tous les maquis n'ont pas les mêmes besoins : un service au comptoir n'a que faire
+d'un plan de salle. La page **Administration**, réservée au gérant, active ou
+désactive chaque fonctionnalité :
+
+| Fonctionnalité | Désactivable |
+|----------------|--------------|
+| Tableau de bord, Gestion de salle, Stock, Dépenses | oui |
+| Commandes, Carte, Caisse | non — cœur du logiciel |
+
+Une fonctionnalité désactivée disparaît du menu **et** ses URL sont fermées (`403`
+sur les appels de données), pour tout le monde, gérant compris. Les données déjà
+saisies sont conservées et réapparaissent telles quelles à la réactivation.
+
+Désactiver la gestion de salle retire aussi le choix de table dans la prise de
+commande — une table envoyée par un formulaire forgé est ignorée — et remplace la
+carte « Tables occupées » du tableau de bord par le reste à encaisser.
+
+Pour ajouter une fonctionnalité plus tard : la décrire dans `backend/modules.py`,
+écrire sa page, rattacher ses endpoints dans `backend/roles.py`. La ligne en base
+est créée au démarrage suivant. L'état est relu au plus toutes les 30 secondes,
+donc un basculement peut mettre ce délai à se propager aux autres workers gunicorn.
+
 ## Droits par rôle
 
 | | Dashboard | Salle | Commandes | Menu | Stock | Caisse | Dépenses |
 |---|---|---|---|---|---|---|---|
 | **Gérant**   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | *(et la page Administration)* | | | | | | |
 | **Caissier** | — | ✓ | ✓ | — | — | ✓ | — |
 | **Serveur**  | — | ✓ | ✓ | lecture | — | — | — |
 
@@ -104,7 +129,8 @@ Deux règles structurent le backend :
 ## Modèle de données
 
 `roles`, `utilisateurs`, `tables_salle`, `categories`, `articles`, `commandes`,
-`lignes_commande`, `paiements`, `mouvements_stock`, `depenses`, `compteurs`.
+`lignes_commande`, `paiements`, `mouvements_stock`, `depenses`, `compteurs`,
+`modules`.
 
 `compteurs` porte la numérotation des références (`CMD-0001`, `PAI-0002`, ...) :
 le numéro est attribué sous verrou, sinon deux commandes prises au même instant

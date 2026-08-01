@@ -35,12 +35,17 @@ function afficherIndicateurs(donnees) {
     Divix.animerNombre(document.getElementById('ticket-moyen'), donnees.ticket_moyen);
     Divix.animerNombre(document.getElementById('tables-occupees'), donnees.tables_occupees);
 
-    document.getElementById('total-tables').textContent = ` / ${donnees.total_tables} tables`;
+    Divix.animerNombre(document.getElementById('impaye-total'), donnees.montant_impaye);
+
+    const total = document.getElementById('total-tables');
+    if (total) total.textContent = ` / ${donnees.total_tables} tables`;
     document.getElementById('couverts-jour').textContent = `${donnees.couverts_jour} couverts`;
 
     const impaye = document.getElementById('impaye-jour');
-    impaye.textContent = `${Divix.fcfa(donnees.montant_impaye)} en attente`;
-    impaye.className = `ms-auto badge ${donnees.montant_impaye > 0 ? 'badge-pending' : 'badge-success'}`;
+    if (impaye) {
+        impaye.textContent = `${Divix.fcfa(donnees.montant_impaye)} en attente`;
+        impaye.className = `ms-auto badge ${donnees.montant_impaye > 0 ? 'badge-pending' : 'badge-success'}`;
+    }
 
     afficherPourcentage('ca-percentage', donnees.pourcentages?.ca);
     afficherPourcentage('commandes-percentage', donnees.pourcentages?.commandes);

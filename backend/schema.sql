@@ -17,6 +17,13 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
     CONSTRAINT fk_utilisateurs_role FOREIGN KEY (id_role) REFERENCES roles(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Fonctionnalités activables depuis la page Administration. Les lignes
+-- manquantes sont créées au démarrage à partir de backend/modules.py.
+CREATE TABLE IF NOT EXISTS modules (
+    cle    VARCHAR(30) NOT NULL PRIMARY KEY,
+    actif  TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Numérotation des références (CMD-0001, PAI-0002, ...) : un compteur par
 -- préfixe, verrouillé le temps de l'incrément.
 CREATE TABLE IF NOT EXISTS compteurs (

@@ -14,11 +14,13 @@ PAGES = [
     {"cle": "stock", "url": "/stock", "libelle": "Stock", "icone": "bxf bx-package"},
     {"cle": "caisse", "url": "/caisse", "libelle": "Caisse", "icone": "bx bx-currency-notes"},
     {"cle": "depense", "url": "/depense", "libelle": "Dépenses", "icone": "bxf bx-wallet"},
+    {"cle": "administration", "url": "/administration", "libelle": "Administration", "icone": "bxf bx-cog"},
 ]
 
 TOUTES_LES_PAGES = {page["cle"] for page in PAGES}
 
 PAGES_PAR_ROLE = {
+    # Seul le gérant administre les fonctionnalités.
     "Gérant": TOUTES_LES_PAGES,
     "Caissier": {"salle", "commande", "caisse"},
     "Serveur": {"salle", "commande", "menu"},
@@ -61,6 +63,8 @@ PAGE_PAR_ENDPOINT = {
     "depense": "depense",
     "depense_list": "depense",
     "depense_add": "depense",
+    "administration": "administration",
+    "administration_modules": "administration",
 }
 
 ENDPOINTS_PUBLICS = {"login", "static"}
