@@ -594,3 +594,45 @@ def test_boutons_de_creation_caches_pour_la_lecture_seule(app_maquis):
     assert 'data-bs-target="#categorieModal"' not in serveur
     assert 'data-modifiable="0"' in serveur
 
+
+# ----------------------------------------------------------------------------
+# PAGINATION ET ACTIONS DES CARTES
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url, barre",
+    [
+        ("/commande", "pagination-commandes"),
+        ("/caisse", "pagination-caisse"),
+        ("/depense", "pagination-depenses"),
+        ("/stock", "pagination-stock"),
+        ("/stock", "pagination-mouvements"),
+        ("/menu", "pagination-menu"),
+    ],
+)
+def test_barre_de_pagination_presente(client_connecte, url, barre):
+    assert f'id="{barre}"' in client_connecte.get(url).get_data(as_text=True)
+
+
+def test_action_des_cartes_selon_le_role(app_maquis):
+    """Le gérant gère la carte, le serveur commande depuis la carte."""
+    gerant = _connecte_en(app_maquis, "Gérant").get("/menu").get_data(as_text=True)
+    assert 'data-modifiable="1"' in gerant
+    assert 'id="barre-panier"' not in gerant
+
+    serveur = _connecte_en(app_maquis, "Serveur").get("/menu").get_data(as_text=True)
+    assert 'data-modifiable="0"' in serveur
+    assert 'data-commandable="1"' in serveur
+    assert 'id="barre-panier"' in serveur
+
+
+def test_libelle_court_pour_la_barre_du_telephone(app_maquis):
+    """Huit onglets ne tiennent pas sur un écran de téléphone avec les libellés longs."""
+    from backend import roles
+
+    html = _connecte_en(app_maquis, "Gérant").get("/menu").get_data(as_text=True)
+    for page in roles.PAGES:
+        if page.get("court"):
+            assert f"<span>{page['court']}</span>" in html
+

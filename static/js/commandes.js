@@ -333,6 +333,20 @@ function imprimerTicket() {
 /* -------------------------------------------------------------------------- */
 
 let appliquerFiltres = null;
+let paginationCommandes = null;
+
+/* Panier éventuellement constitué depuis la carte (bouton « Ajouter »). */
+function reprendrePanierDeLaCarte() {
+    try {
+        const enAttente = JSON.parse(sessionStorage.getItem('divix.panier')) || [];
+        if (!enAttente.length) return;
+        panier = enAttente;
+        sessionStorage.removeItem('divix.panier');
+        afficherPanier();
+    } catch (erreur) {
+        console.error(erreur);
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     chargerCatalogue();
@@ -343,11 +357,21 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('remise')?.addEventListener('input', recalculerTotal);
     document.getElementById('imprimerTicketBtn')?.addEventListener('click', imprimerTicket);
 
+    paginationCommandes = Divix.paginer({
+        idConteneur: 'tbody-commandes',
+        idBarre: 'pagination-commandes',
+        taille: 10,
+        libelle: 'commandes'
+    });
+
     appliquerFiltres = Divix.brancherFiltres({
         idTbody: 'tbody-commandes',
         idRecherche: 'searchInput',
-        filtres: [{ idSelect: 'filtreStatut', attribut: 'statut' }]
+        filtres: [{ idSelect: 'filtreStatut', attribut: 'statut' }],
+        apres: () => paginationCommandes.rafraichir(true)
     });
+
+    reprendrePanierDeLaCarte();
 
     Divix.brancherFormulaire({
         idBouton: 'submitCommandeBtn',

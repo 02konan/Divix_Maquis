@@ -232,7 +232,8 @@ const Divix = {
     /**
      * Filtre les lignes d'un tbody sur un texte libre et/ou un attribut data.
      */
-    brancherFiltres({ idTbody, idRecherche, filtres = [] }) {
+    /* `apres` sert à réappliquer la pagination une fois le filtrage terminé. */
+    brancherFiltres({ idTbody, idRecherche, filtres = [], apres = null }) {
         const tbody = document.getElementById(idTbody);
         if (!tbody) return;
 
@@ -252,8 +253,14 @@ const Divix = {
                     return !valeur || ligne.dataset[attribut] === valeur;
                 });
 
-                ligne.style.display = correspondTexte && correspondFiltres ? '' : 'none';
+                // Une classe plutôt que style.display : la pagination masque de
+                // son côté, les deux ne doivent pas s'écraser mutuellement.
+                ligne.classList.toggle(
+                    'filtre-masque', !(correspondTexte && correspondFiltres)
+                );
             });
+
+            apres?.();
         };
 
         document.getElementById(idRecherche)?.addEventListener('input', appliquer);
@@ -262,6 +269,87 @@ const Divix = {
         });
 
         return appliquer;
+    },
+
+    /* ------------------------------------------------------------------ */
+    /* Pagination                                                         */
+    /* ------------------------------------------------------------------ */
+
+    _numerosPages(courante, total) {
+        if (total <= 5) {
+            return Array.from({ length: total }, (_, index) => index + 1);
+        }
+        const pages = [1];
+        if (courante > 3) pages.push('…');
+        for (let p = Math.max(2, courante - 1); p <= Math.min(total - 1, courante + 1); p += 1) {
+            pages.push(p);
+        }
+        if (courante < total - 2) pages.push('…');
+        pages.push(total);
+        return pages;
+    },
+
+    /**
+     * Pagine les éléments d'un conteneur (lignes de tableau ou cartes).
+     * La barre reste masquée tant qu'il n'y a pas de quoi tourner la page.
+     */
+    paginer({ idConteneur, idBarre, selecteur = 'tr', taille = 10, libelle = 'lignes' }) {
+        const conteneur = document.getElementById(idConteneur);
+        const barre = document.getElementById(idBarre);
+        if (!conteneur || !barre) return { rafraichir() {} };
+
+        let page = 1;
+
+        const eligibles = () => [...conteneur.querySelectorAll(selecteur)].filter(
+            (element) => !element.classList.contains('line-nothing')
+                && !element.classList.contains('grille-vide')
+                && !element.classList.contains('filtre-masque')
+        );
+
+        const rendre = () => {
+            const liste = eligibles();
+            const pages = Math.max(1, Math.ceil(liste.length / taille));
+            page = Math.min(page, pages);
+            const debut = (page - 1) * taille;
+
+            liste.forEach((element, index) => {
+                element.classList.toggle(
+                    'page-masquee', index < debut || index >= debut + taille
+                );
+            });
+
+            if (liste.length <= taille) {
+                barre.innerHTML = '';
+                return;
+            }
+
+            const fin = Math.min(debut + taille, liste.length);
+            barre.innerHTML = `
+                <span class="pg-info">${debut + 1}–${fin} sur ${liste.length} ${libelle}</span>
+                <span class="pg-divider"></span>
+                <button class="pg-btn" data-page="${page - 1}" ${page === 1 ? 'disabled' : ''}
+                        aria-label="Page précédente">‹</button>
+                ${Divix._numerosPages(page, pages).map((numero) => numero === '…'
+                    ? '<span class="pg-dots">…</span>'
+                    : `<button class="pg-btn${numero === page ? ' active' : ''}" data-page="${numero}">${numero}</button>`
+                ).join('')}
+                <button class="pg-btn" data-page="${page + 1}" ${page === pages ? 'disabled' : ''}
+                        aria-label="Page suivante">›</button>`;
+
+            barre.querySelectorAll('.pg-btn[data-page]').forEach((bouton) => {
+                bouton.addEventListener('click', () => {
+                    page = Number(bouton.dataset.page);
+                    rendre();
+                });
+            });
+        };
+
+        return {
+            rafraichir(reinitialiser = false) {
+                if (reinitialiser) page = 1;
+                rendre();
+            }
+        };
     }
 };
 

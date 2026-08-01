@@ -1,6 +1,8 @@
 /* Suivi des stocks de boissons et journal des mouvements. */
 
 let appliquerFiltresStock = null;
+let paginationStock = null;
+let paginationMouvements = null;
 
 async function chargerStock() {
     Divix.chargement('tbody-stock', 6);
@@ -11,6 +13,8 @@ async function chargerStock() {
         Divix.compteurs(reponse.counter);
         afficherStock(reponse.data || []);
         afficherMouvements(reponse.mouvements || []);
+        paginationStock?.rafraichir(true);
+        paginationMouvements?.rafraichir(true);
     } catch (erreur) {
         console.error(erreur);
         Divix.vide('tbody-stock', 'Impossible de charger les stocks', 6);
@@ -59,9 +63,26 @@ function afficherMouvements(mouvements) {
 document.addEventListener('DOMContentLoaded', () => {
     chargerStock();
 
+    paginationStock = Divix.paginer({
+        idConteneur: 'tbody-stock',
+        idBarre: 'pagination-stock',
+        taille: 10,
+        libelle: 'articles'
+    });
+    paginationMouvements = Divix.paginer({
+        idConteneur: 'tbody-mouvements',
+        idBarre: 'pagination-mouvements',
+        taille: 10,
+        libelle: 'mouvements'
+    });
+
     appliquerFiltresStock = Divix.brancherFiltres({
         idTbody: 'tbody-stock',
-        idRecherche: 'searchInput'
+        idRecherche: 'searchInput',
+        apres: () => {
+            paginationStock.rafraichir(true);
+            paginationMouvements.rafraichir(true);
+        }
     });
 
     // Un inventaire saisit le stock réel constaté, pas un écart.

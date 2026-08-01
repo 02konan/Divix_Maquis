@@ -1,6 +1,7 @@
 /* Journal des dépenses du maquis. */
 
 let appliquerFiltresDepenses = null;
+let paginationDepenses = null;
 
 async function chargerDepenses() {
     Divix.chargement('tbody-depenses', 7);
@@ -38,10 +39,18 @@ function afficherDepenses(depenses) {
 document.addEventListener('DOMContentLoaded', () => {
     chargerDepenses();
 
+    paginationDepenses = Divix.paginer({
+        idConteneur: 'tbody-depenses',
+        idBarre: 'pagination-depenses',
+        taille: 10,
+        libelle: 'dépenses'
+    });
+
     appliquerFiltresDepenses = Divix.brancherFiltres({
         idTbody: 'tbody-depenses',
         idRecherche: 'searchInput',
-        filtres: [{ idSelect: 'filtreCategorie', attribut: 'categorie' }]
+        filtres: [{ idSelect: 'filtreCategorie', attribut: 'categorie' }],
+        apres: () => paginationDepenses.rafraichir(true)
     });
 
     Divix.brancherFormulaire({

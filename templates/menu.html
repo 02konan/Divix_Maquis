@@ -230,7 +230,13 @@
                     {% endfor %}
                 </div>
 
-                <div class="grille-menu mt-3" id="grille-menu" data-modifiable="{{ 1 if peut_modifier else 0 }}"></div>
+                <div class="grille-menu mt-3" id="grille-menu"
+                     data-modifiable="{{ 1 if peut_modifier else 0 }}"
+                     data-commandable="{{ 1 if peut_commander else 0 }}"></div>
+                <div class="pagination-liste" id="pagination-menu"></div>
+                {% if peut_commander and not peut_modifier %}
+                <button type="button" class="barre-panier" id="barre-panier" style="display:none;"></button>
+                {% endif %}
             </div>
         </div>
     </div>

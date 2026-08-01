@@ -2,6 +2,7 @@
 
 let commandesEncaissables = [];
 let appliquerFiltresCaisse = null;
+let paginationCaisse = null;
 
 async function chargerCaisse() {
     Divix.chargement('tbody-caisse', 8);
@@ -98,10 +99,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('referenceCommande')
         ?.addEventListener('change', surSelectionCommande);
 
+    paginationCaisse = Divix.paginer({
+        idConteneur: 'tbody-caisse',
+        idBarre: 'pagination-caisse',
+        taille: 10,
+        libelle: 'encaissements'
+    });
+
     appliquerFiltresCaisse = Divix.brancherFiltres({
         idTbody: 'tbody-caisse',
         idRecherche: 'searchInput',
-        filtres: [{ idSelect: 'filtreMode', attribut: 'mode' }]
+        filtres: [{ idSelect: 'filtreMode', attribut: 'mode' }],
+        apres: () => paginationCaisse.rafraichir(true)
     });
 
     Divix.brancherFormulaire({

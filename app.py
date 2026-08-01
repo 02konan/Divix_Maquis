@@ -275,9 +275,14 @@ def menu():
         active_page="menu",
         categories=lectures.liste_categories(),
         # Le serveur consulte la carte sans la modifier : inutile de lui montrer
-        # des boutons qui répondraient 403.
+        # des boutons qui répondraient 403. En revanche il commande, donc c'est
+        # « Ajouter » qui s'affiche sur les plats — comme le verront les clients
+        # arrivant par QR code.
         peut_modifier=roles.acces_autorise(
             session.get("user_role"), "menu_add", "POST"
+        ),
+        peut_commander=roles.acces_autorise(
+            session.get("user_role"), "commande_add", "POST"
         ),
     )
 
