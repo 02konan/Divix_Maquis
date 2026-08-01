@@ -84,6 +84,168 @@
 }
 
 /* ---------------------------------------------------------------- */
+/* Carte du maquis : présentation en cartes-plats                   */
+/* ---------------------------------------------------------------- */
+
+.chips-categories {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+}
+
+.chip-categorie {
+    flex: 0 0 auto;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--grey);
+    background: var(--dark-white);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.chip-categorie:hover {
+    border-color: var(--light-grey);
+}
+
+.chip-categorie.actif {
+    color: var(--white);
+    background: var(--blue);
+}
+
+.grille-menu {
+    display: grid;
+    /* Deux colonnes dès le téléphone : c'est la lecture attendue d'une carte
+       de restaurant, et ce sera l'affichage vu par les clients au QR code. */
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+}
+
+@media (min-width: 576px) {
+    .grille-menu {
+        grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+        gap: 14px;
+    }
+}
+
+.carte-plat {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--white);
+    border: 1px solid var(--light-grey);
+    border-radius: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.carte-plat:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+.photo-plat {
+    position: relative;
+    display: flex;
+    aspect-ratio: 4 / 3;
+    align-items: center;
+    justify-content: center;
+    font-size: 42px;
+    background: var(--primary-light);
+}
+
+.photo-plat img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.etiquette-categorie {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-color);
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+}
+
+.pastille-stock {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+}
+
+.carte-plat.indisponible .photo-plat {
+    filter: grayscale(1);
+}
+
+.voile-indisponible {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--white);
+    text-transform: uppercase;
+    background: rgba(28, 28, 28, 0.45);
+}
+
+.corps-plat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px 12px;
+}
+
+.nom-plat {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.prix-plat {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--blue);
+}
+
+.pied-plat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.squelette-plat {
+    height: 230px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    border-radius: 12px;
+    animation: shimmer 1.5s infinite;
+}
+
+.grille-vide {
+    padding: 32px 0;
+    color: var(--grey);
+    text-align: center;
+}
+
+/* ---------------------------------------------------------------- */
 /* Vignettes du menu                                                */
 /* ---------------------------------------------------------------- */
 

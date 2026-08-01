@@ -1,10 +1,17 @@
-/* Carte du maquis : liste des articles, disponibilité et création. */
+/* Carte du maquis : présentation en cartes-plats, disponibilité et création. */
 
 let articlesMenu = [];
-let appliquerFiltresMenu = null;
+let categorieActive = '';
+let modifiable = false;
+
+const EMOJI_DEFAUT = { Bar: '🍺', Cuisine: '🍽️' };
+
+function grille() {
+    return document.getElementById('grille-menu');
+}
 
 async function chargerMenu() {
-    Divix.chargement('tbody-menu', 8);
+    grille().innerHTML = '<div class="squelette-plat"></div>'.repeat(8);
 
     try {
         const reponse = await Divix.charger('/menu/list');
@@ -13,60 +20,89 @@ async function chargerMenu() {
         afficherMenu();
     } catch (erreur) {
         console.error(erreur);
-        Divix.vide('tbody-menu', 'Impossible de charger la carte', 8);
+        grille().innerHTML = '<p class="grille-vide">Impossible de charger la carte</p>';
     }
+}
+
+function pastilleStock(article) {
+    if (!article.gere_stock) return '';
+    const classe = article.stock <= 0
+        ? 'badge-danger'
+        : (article.stock <= article.seuil_alerte ? 'badge-pending' : 'badge-success');
+    return `<span class="pastille-stock badge ${classe}">${article.stock} en stock</span>`;
+}
+
+function carteArticle(article) {
+    const marge = article.prix - article.cout_revient;
+    const pourcentage = article.prix > 0 ? Math.round((marge / article.prix) * 100) : 0;
+    const indisponible = !article.disponible || (article.gere_stock && article.stock <= 0);
+
+    const visuel = article.image
+        ? `<img src="/static/uploads/${Divix.echapper(article.image)}" alt="${Divix.echapper(article.nom)}" loading="lazy">`
+        : (EMOJI_DEFAUT[article.type_categorie] || '🍽️');
+
+    const action = modifiable
+        ? `<button class="btn btn-sm ms-auto ${article.disponible ? 'btn-action-annuler' : 'btn-action-servir'}"
+                   onclick="basculerDisponibilite(${article.id}, ${article.disponible ? 0 : 1})">
+               ${article.disponible ? 'Retirer' : 'Remettre'}
+           </button>`
+        : '';
+
+    return `
+    <article class="carte-plat ${indisponible ? 'indisponible' : ''}"
+             data-categorie="${Divix.echapper(article.categorie)}"
+             data-recherche="${Divix.echapper(`${article.nom} ${article.categorie} ${article.reference}`).toLowerCase()}">
+        <div class="photo-plat">
+            ${visuel}
+            <span class="etiquette-categorie">${Divix.echapper(article.categorie)}</span>
+            ${pastilleStock(article)}
+            ${indisponible ? `<span class="voile-indisponible">${article.disponible ? 'Rupture' : 'Hors carte'}</span>` : ''}
+        </div>
+        <div class="corps-plat">
+            <h3 class="nom-plat">${Divix.echapper(article.nom)}</h3>
+            <span class="small text-muted">
+                ${article.cout_revient > 0
+                    ? `Marge ${Divix.fcfa(marge)} · ${pourcentage}%`
+                    : Divix.echapper(article.reference)}
+            </span>
+            <div class="pied-plat">
+                <span class="prix-plat">${Divix.fcfa(article.prix)}</span>
+                ${action}
+            </div>
+        </div>
+    </article>`;
 }
 
 function afficherMenu() {
     if (!articlesMenu.length) {
-        Divix.vide('tbody-menu', 'Aucun article au menu', 8);
+        grille().innerHTML = '<p class="grille-vide">Aucun article au menu</p>';
         return;
     }
 
-    document.getElementById('tbody-menu').innerHTML = articlesMenu.map((article) => {
-        const marge = article.prix - article.cout_revient;
-        const pourcentageMarge = article.prix > 0
-            ? Math.round((marge / article.prix) * 100)
-            : 0;
+    grille().innerHTML = articlesMenu.map(carteArticle).join('');
+    filtrerCartes();
+}
 
-        return `
-        <tr data-categorie="${Divix.echapper(article.categorie)}">
-            <td data-label="Référence"><span class="text-muted small">${Divix.echapper(article.reference)}</span></td>
-            <td data-label="Article">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="vignette-article">
-                        ${article.image
-                            ? `<img src="/static/uploads/${Divix.echapper(article.image)}" alt="">`
-                            : (article.type_categorie === 'Bar' ? '🍺' : '🍽️')}
-                    </div>
-                    <div>
-                        <p class="m-0 p-0">${Divix.echapper(article.nom)}</p>
-                        ${article.disponible ? '' : '<span class="small text-danger">Retiré de la carte</span>'}
-                    </div>
-                </div>
-            </td>
-            <td data-label="Catégorie">${Divix.echapper(article.categorie)}</td>
-            <td data-label="Prix">${Divix.fcfa(article.prix)}</td>
-            <td data-label="Marge">
-                ${article.cout_revient > 0
-                    ? `${Divix.fcfa(marge)} <span class="small text-muted">(${pourcentageMarge}%)</span>`
-                    : '<span class="text-muted">—</span>'}
-            </td>
-            <td data-label="Stock">${article.gere_stock ? article.stock : '<span class="text-muted">—</span>'}</td>
-            <td data-label="Statut">${Divix.badge(article.statut)}</td>
-            <td class="no-print-col" data-label="Action" style="text-align:end;">
-                <div style="display:flex; gap:6px; justify-content:flex-end;">
-                    <button class="btn btn-sm ${article.disponible ? 'btn-action-annuler' : 'btn-action-servir'}"
-                            onclick="basculerDisponibilite(${article.id}, ${article.disponible ? 0 : 1})"
-                            title="${article.disponible ? 'Retirer de la carte' : 'Remettre à la carte'}">
-                        ${article.disponible ? 'Retirer' : 'Remettre'}
-                    </button>
-                </div>
-            </td>
-        </tr>`;
-    }).join('');
+function filtrerCartes() {
+    const recherche = (document.getElementById('searchInput')?.value || '')
+        .toLowerCase()
+        .trim();
 
-    appliquerFiltresMenu?.();
+    let visibles = 0;
+    grille().querySelectorAll('.carte-plat').forEach((carte) => {
+        const correspond =
+            (!categorieActive || carte.dataset.categorie === categorieActive) &&
+            (!recherche || carte.dataset.recherche.includes(recherche));
+        carte.style.display = correspond ? '' : 'none';
+        if (correspond) visibles += 1;
+    });
+
+    const message = grille().querySelector('.grille-vide');
+    if (!visibles && !message) {
+        grille().insertAdjacentHTML('beforeend', '<p class="grille-vide">Aucun article ne correspond</p>');
+    } else if (visibles && message) {
+        message.remove();
+    }
 }
 
 async function basculerDisponibilite(idArticle, disponible) {
@@ -84,19 +120,26 @@ async function basculerDisponibilite(idArticle, disponible) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    modifiable = grille()?.dataset.modifiable === '1';
     chargerMenu();
+
+    document.getElementById('searchInput')?.addEventListener('input', filtrerCartes);
+
+    document.querySelectorAll('.chip-categorie').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.chip-categorie').forEach((autre) => {
+                autre.classList.toggle('actif', autre === chip);
+            });
+            categorieActive = chip.dataset.categorie;
+            filtrerCartes();
+        });
+    });
 
     // Le bloc stock ne concerne que les articles décomptés (boissons).
     const selecteurStock = document.getElementById('articleGereStock');
     const blocStock = document.getElementById('blocStock');
     selecteurStock?.addEventListener('change', () => {
         blocStock.style.display = selecteurStock.value === '1' ? '' : 'none';
-    });
-
-    appliquerFiltresMenu = Divix.brancherFiltres({
-        idTbody: 'tbody-menu',
-        idRecherche: 'searchInput',
-        filtres: [{ idSelect: 'filtreCategorie', attribut: 'categorie' }]
     });
 
     Divix.brancherFormulaire({

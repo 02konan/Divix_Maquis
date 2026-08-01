@@ -271,7 +271,14 @@ def salle_statut(id_table):
 @app.route("/menu")
 def menu():
     return render_template(
-        "menu.html", active_page="menu", categories=lectures.liste_categories()
+        "menu.html",
+        active_page="menu",
+        categories=lectures.liste_categories(),
+        # Le serveur consulte la carte sans la modifier : inutile de lui montrer
+        # des boutons qui répondraient 403.
+        peut_modifier=roles.acces_autorise(
+            session.get("user_role"), "menu_add", "POST"
+        ),
     )
 
 

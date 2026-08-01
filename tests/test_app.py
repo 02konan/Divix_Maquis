@@ -573,3 +573,24 @@ def test_module_absent_de_la_base_garde_sa_valeur_par_defaut(app_maquis):
     modules.initialiser()
     assert modules.actif("depense") is True
 
+
+def test_carte_affichee_en_cartes_plats(app_maquis):
+    """La carte s'affiche en grille de cartes, filtrable par catégorie."""
+    html = _connecte_en(app_maquis, "Gérant").get("/menu").get_data(as_text=True)
+
+    assert 'id="grille-menu"' in html
+    assert 'class="chip-categorie' in html
+    assert 'data-categorie="Grillades"' in html
+    assert 'id="tbody-menu"' not in html
+
+
+def test_boutons_de_creation_caches_pour_la_lecture_seule(app_maquis):
+    gerant = _connecte_en(app_maquis, "Gérant").get("/menu").get_data(as_text=True)
+    assert 'data-bs-target="#articleModal"' in gerant
+    assert 'data-modifiable="1"' in gerant
+
+    serveur = _connecte_en(app_maquis, "Serveur").get("/menu").get_data(as_text=True)
+    assert 'data-bs-target="#articleModal"' not in serveur
+    assert 'data-bs-target="#categorieModal"' not in serveur
+    assert 'data-modifiable="0"' in serveur
+

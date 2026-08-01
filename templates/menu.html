@@ -135,6 +135,7 @@
 <div class="content-wrapper d-flex flex-column gap-3">
     <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
         <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Menu</span></p>
+        {% if peut_modifier %}
         <button class="ms-auto btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#categorieModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
@@ -147,6 +148,7 @@
             </svg>
             <span class="mx-1">Article</span>
         </button>
+        {% endif %}
     </div>
 
     <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">
@@ -212,12 +214,6 @@
                         <span class="small text-muted">Carte du maquis</span>
                     </div>
                     <div class="ms-auto d-flex gap-2 filter-content">
-                        <select id="filtreCategorie" class="form-select rounded-pill">
-                            <option value="">Toutes les catégories</option>
-                            {% for categorie in categories %}
-                            <option value="{{ categorie.nom }}">{{ categorie.nom }}</option>
-                            {% endfor %}
-                        </select>
                         <form action="" class="d-flex align-items-center rounded-pill" id="searchForm" onsubmit="return false;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M10.5 19c1.98 0 3.81-.69 5.25-1.83L20 21.42l1.41-1.41-4.25-4.25a8.47 8.47 0 0 0 1.83-5.25c0-4.69-3.81-8.5-8.5-8.5S2 5.81 2 10.5 5.81 19 10.5 19m0-15c3.58 0 6.5 2.92 6.5 6.5S14.08 17 10.5 17 4 14.08 4 10.5 6.92 4 10.5 4"></path>
@@ -226,23 +222,15 @@
                         </form>
                     </div>
                 </div>
-                <div class="table-responsive mt-3">
-                    <table class="table last-command align-middle">
-                        <thead>
-                            <tr class="table-light">
-                                <th class="text-muted" scope="col">RÉFÉRENCE</th>
-                                <th class="text-muted" scope="col">ARTICLE</th>
-                                <th class="text-muted" scope="col">CATÉGORIE</th>
-                                <th class="text-muted" scope="col">PRIX</th>
-                                <th class="text-muted" scope="col">MARGE</th>
-                                <th class="text-muted" scope="col">STOCK</th>
-                                <th class="text-muted" scope="col">STATUT</th>
-                                <th class="text-muted text-end" scope="col">ACTION</th>
-                            </tr>
-                        </thead>
-                        <tbody class="result" id="tbody-menu"></tbody>
-                    </table>
+
+                <div class="chips-categories mt-3" id="chips-categories">
+                    <button type="button" class="chip-categorie actif" data-categorie="">Tout</button>
+                    {% for categorie in categories %}
+                    <button type="button" class="chip-categorie" data-categorie="{{ categorie.nom }}">{{ categorie.nom }}</button>
+                    {% endfor %}
                 </div>
+
+                <div class="grille-menu mt-3" id="grille-menu" data-modifiable="{{ 1 if peut_modifier else 0 }}"></div>
             </div>
         </div>
     </div>
