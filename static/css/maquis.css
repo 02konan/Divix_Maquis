@@ -431,14 +431,26 @@
 /* ---------------------------------------------------------------- */
 
 @media (max-width: 991.98px) {
-    /* Huit entrées réclamaient 520 px dans une barre de 390 px : les
-       dernières sortaient de l'écran. La barre défile désormais. */
+    /* Huit entrées réclamaient 520 px dans une barre de 390 px : les dernières
+       sortaient de l'écran, hors d'atteinte. La barre défile désormais, avec un
+       voile sur le bord qui reste à parcourir pour que ça se voie. */
+    /* Pas de `position: relative` ici : la barre est déjà `fixed`, ce qui suffit
+       à ancrer les voiles, et l'écraser la sortirait du bas de l'écran. */
+    .navbar-mobile .navbar-nav-box {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
     .navbar-mobile .menu {
+        max-width: 100%;
+        min-width: 0;
         justify-content: flex-start !important;
-        gap: 2px;
+        gap: 4px;
         overflow-x: auto;
         scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
+        scroll-snap-type: x proximity;
     }
 
     .navbar-mobile .menu::-webkit-scrollbar {
@@ -447,17 +459,46 @@
 
     .navbar-mobile .menu .nav-item {
         flex: 0 0 auto;
+        scroll-snap-align: center;
     }
 
     .navbar-mobile .menu .nav-link {
-        padding: 0 2px;
-        font-size: 10px;
+        padding: 0 6px;
+        font-size: 11px;
         white-space: nowrap;
     }
 
     .navbar-mobile .menu .nav-link .icon-nav {
-        width: 38px;
-        height: 38px;
+        width: 46px;
+        height: 46px;
+    }
+
+    .navbar-mobile::before,
+    .navbar-mobile::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 26px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        z-index: 1;
+    }
+
+    .navbar-mobile::before {
+        left: 0;
+        background: linear-gradient(to right, #2b46c4, rgba(43, 70, 196, 0));
+    }
+
+    .navbar-mobile::after {
+        right: 0;
+        background: linear-gradient(to left, #2b46c4, rgba(43, 70, 196, 0));
+    }
+
+    .navbar-mobile.reste-avant::before,
+    .navbar-mobile.reste-apres::after {
+        opacity: 1;
     }
 }
 

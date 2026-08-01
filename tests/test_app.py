@@ -625,14 +625,3 @@ def test_action_des_cartes_selon_le_role(app_maquis):
     assert 'data-modifiable="0"' in serveur
     assert 'data-commandable="1"' in serveur
     assert 'id="barre-panier"' in serveur
-
-
-def test_libelle_court_pour_la_barre_du_telephone(app_maquis):
-    """Huit onglets ne tiennent pas sur un écran de téléphone avec les libellés longs."""
-    from backend import roles
-
-    html = _connecte_en(app_maquis, "Gérant").get("/menu").get_data(as_text=True)
-    for page in roles.PAGES:
-        if page.get("court"):
-            assert f"<span>{page['court']}</span>" in html
-

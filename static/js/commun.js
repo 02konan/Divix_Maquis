@@ -370,3 +370,33 @@ document.addEventListener('DOMContentLoaded', () => {
     rafraichir();
     setInterval(rafraichir, 30000);
 });
+
+/* Barre de navigation du téléphone : elle défile quand les onglets ne tiennent
+   pas tous. On amène l'onglet courant sous les yeux et on signale, par un voile
+   sur le bord, qu'il reste des onglets de ce côté. */
+document.addEventListener('DOMContentLoaded', () => {
+    const barre = document.querySelector('.navbar-mobile');
+    const menu = barre?.querySelector('.menu');
+    if (!menu) return;
+
+    const marquerBords = () => {
+        const reste = menu.scrollWidth - menu.clientWidth;
+        barre.classList.toggle('reste-avant', menu.scrollLeft > 4);
+        barre.classList.toggle('reste-apres', menu.scrollLeft < reste - 4);
+    };
+
+    const centrerOngletActif = () => {
+        const actif = menu.querySelector('.nav-link.active');
+        if (!actif) return;
+        // scrollLeft plutôt que scrollIntoView : celui-ci ferait aussi sauter la page.
+        menu.scrollLeft = actif.offsetLeft - (menu.clientWidth - actif.offsetWidth) / 2;
+    };
+
+    centrerOngletActif();
+    marquerBords();
+    menu.addEventListener('scroll', marquerBords, { passive: true });
+    window.addEventListener('resize', () => {
+        centrerOngletActif();
+        marquerBords();
+    });
+});
