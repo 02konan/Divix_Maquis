@@ -625,3 +625,68 @@ def test_action_des_cartes_selon_le_role(app_maquis):
     assert 'data-modifiable="0"' in serveur
     assert 'data-commandable="1"' in serveur
     assert 'id="barre-panier"' in serveur
+
+
+def test_montants_en_decimal_ou_en_double(app_maquis):
+    """Les écritures doivent tenir quel que soit le type des colonnes monétaires.
+
+    Une base créée hors de l'application (reprise, import) peut typer les
+    montants en DOUBLE là où le schéma pose du DECIMAL. Mélanger les deux dans
+    un calcul lève `unsupported operand type(s) for -`.
+    """
+    from backend.database import executer
+
+    for table, colonne in [
+        ("articles", "prix"),
+        ("commandes", "montant_total"),
+        ("paiements", "montant"),
+    ]:
+        executer(f"ALTER TABLE {table} MODIFY {colonne} DOUBLE NOT NULL DEFAULT 0")
+
+    client = _connecte_en(app_maquis, "Gérant")
+    article = client.get("/menu/disponibles").get_json()["data"][0]
+
+    creation = client.post(
+        "/commande/add",
+        data={
+            "type_service": "Sur place",
+            "remise": "500",
+            "articles": f'[{{"id_article": {article["id"]}, "quantite": 2}}]',
+        },
+    ).get_json()
+    assert creation["success"] is True, creation
+    assert creation["montant_total"] == article["prix"] * 2 - 500
+
+    partiel = client.post(
+        "/caisse/add",
+        data={"reference": creation["reference"], "montant": 500, "mode": "Espèces"},
+    ).get_json()
+    assert partiel["success"] is True, partiel
+    assert partiel["reste_a_payer"] == creation["montant_total"] - 500
+
+    solde = client.post(
+        "/caisse/add",
+        data={
+            "reference": creation["reference"],
+            "montant": creation["montant_total"] - 500,
+            "mode": "Wave",
+        },
+    ).get_json()
+    assert solde["reste_a_payer"] == 0
+
+    detail = client.get(f"/commande/{creation['reference']}").get_json()["data"]
+    assert detail["statut"] == "Payée"
+
+
+def test_conversion_des_types_mysql():
+    """Decimal et dates sont ramenés aux types que manipule le reste du code."""
+    from decimal import Decimal
+
+    from backend.database import _convertir
+
+    assert _convertir(Decimal("3000.00")) == 3000
+    assert isinstance(_convertir(Decimal("3000.00")), int)
+    assert _convertir(Decimal("1500.50")) == 1500.5
+    assert isinstance(_convertir(Decimal("1500.50")), float)
+    assert _convertir(None) is None
+

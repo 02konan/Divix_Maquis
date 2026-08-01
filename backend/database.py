@@ -91,6 +91,46 @@ def fermer_connexion():
             pass
 
 
+class Curseur:
+    """Curseur dont les lignes passent toutes par la normalisation des types.
+
+    Sans lui, `lire_un` normalisait mais `conn.execute(...).fetchone()` non : sur
+    une base dont les montants sont en DECIMAL, les écritures récupéraient des
+    `Decimal` et les mélangeaient aux flottants venus du formulaire, ce qui
+    échoue (`unsupported operand type(s) for -`).
+    """
+
+    def __init__(self, curseur):
+        self._curseur = curseur
+
+    def fetchone(self):
+        row = self._curseur.fetchone()
+        return _ligne(row) if row else row
+
+    def fetchall(self):
+        return [_ligne(row) for row in self._curseur.fetchall()]
+
+    def fetchmany(self, taille=None):
+        lignes = (
+            self._curseur.fetchmany()
+            if taille is None
+            else self._curseur.fetchmany(taille)
+        )
+        return [_ligne(row) for row in lignes]
+
+    def __iter__(self):
+        for row in self._curseur:
+            yield _ligne(row)
+
+    @property
+    def lastrowid(self):
+        return self._curseur.lastrowid
+
+    @property
+    def rowcount(self):
+        return self._curseur.rowcount
+
+
 class Connexion:
     # En sortie de bloc la transaction est toujours close (rollback) : sinon la
     # connexion réutilisée garderait un instantané REPEATABLE READ et relirait
@@ -104,7 +144,7 @@ class Connexion:
         curseur = self._conn.cursor()
         # `params or None` évite que PyMySQL tente une interpolation inutile.
         curseur.execute(sql, params or None)
-        return curseur
+        return Curseur(curseur)
 
     def executemany(self, sql, sequence):
         curseur = self._conn.cursor()
@@ -175,13 +215,12 @@ def executer(sql, params=()):
 
 def lire_tout(sql, params=()):
     with connexion() as conn:
-        return [_ligne(row) for row in conn.execute(sql, params).fetchall()]
+        return conn.execute(sql, params).fetchall()
 
 
 def lire_un(sql, params=()):
     with connexion() as conn:
-        row = conn.execute(sql, params).fetchone()
-        return _ligne(row) if row else None
+        return conn.execute(sql, params).fetchone()
 
 
 def valeur(sql, params=(), defaut=0):
@@ -191,7 +230,7 @@ def valeur(sql, params=(), defaut=0):
         if not row:
             return defaut
         premiere = next(iter(row.values()))
-        return defaut if premiere is None else _convertir(premiere)
+        return defaut if premiere is None else premiere
 
 
 MOTIF_TABLE = re.compile(r"CREATE TABLE IF NOT EXISTS (\w+)", re.IGNORECASE)
