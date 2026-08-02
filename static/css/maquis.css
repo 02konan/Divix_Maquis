@@ -547,3 +547,17 @@
         bottom: 104px;
     }
 }
+
+/* ---------------------------------------------------------------- */
+/* Rotation des icônes de chargement                                */
+/* ---------------------------------------------------------------- */
+
+/* Définie ici plutôt que laissée à la police : si le CDN ne répond pas ou
+   si la classe change de nom d'une version à l'autre, l'animation tient. */
+.bx-spin {
+    animation: bx-rotation 1s linear infinite;
+}
+
+@keyframes bx-rotation {
+    to { transform: rotate(360deg); }
+}

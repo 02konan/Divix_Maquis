@@ -202,7 +202,7 @@ const Divix = {
 
             const texteOrigine = bouton.innerHTML;
             bouton.disabled = true;
-            bouton.innerHTML = '<i class="bx bx-loader-circle bx-spin me-2"></i>Enregistrement...';
+            bouton.innerHTML = '<i class="bx bx-loader-lines bx-spin me-2"></i>Enregistrement...';
 
             try {
                 const reponse = await Divix.envoyer(url, donnees);

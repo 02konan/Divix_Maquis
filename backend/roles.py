@@ -8,9 +8,9 @@ pas, l'URL reste tapable à la main.
 # Ordre d'affichage dans le menu. La première page autorisée sert d'accueil.
 PAGES = [
     {"cle": "dashboard", "url": "/", "libelle": "Dashboard", "icone": "bxf bx-layers"},
-    {"cle": "salle", "url": "/salle", "libelle": "Salle", "icone": "bxf bx-grid-alt"},
+    {"cle": "salle", "url": "/salle", "libelle": "Salle", "icone": "bxf bx-grid"},
     {"cle": "commande", "url": "/commande", "libelle": "Commandes", "icone": "bxf bx-receipt"},
-    {"cle": "menu", "url": "/menu", "libelle": "Menu", "icone": "bxf bx-restaurant"},
+    {"cle": "menu", "url": "/menu", "libelle": "Menu", "icone": "bxf bx-fork-knife"},
     {"cle": "stock", "url": "/stock", "libelle": "Stock", "icone": "bxf bx-package"},
     {"cle": "caisse", "url": "/caisse", "libelle": "Caisse", "icone": "bx bx-currency-notes"},
     {"cle": "depense", "url": "/depense", "libelle": "Dépenses", "icone": "bxf bx-wallet"},

@@ -98,7 +98,7 @@
             }
 
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="bx bx-loader-circle bx-spin me-2"></i>Connexion en cours...';
+            submitBtn.innerHTML = '<i class="bx bx-loader-lines bx-spin me-2"></i>Connexion en cours...';
 
             try {
                 const response = await fetch('{{ url_for("login") }}', {
