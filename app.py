@@ -1,6 +1,7 @@
 
 import json
 import os
+import time
 from datetime import timedelta
 
 from dotenv import load_dotenv
@@ -31,6 +32,10 @@ app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "static", "uploads")
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 EXTENSIONS_AUTORISEES = {"png", "jpg", "jpeg", "webp"}
+# Une base recréée laisse des sessions qui pointent un utilisateur disparu :
+# toute écriture échoue alors sur la clé étrangère id_utilisateur. On revérifie
+# de loin en loin plutôt qu'à chaque requête, qui coûterait un aller-retour.
+DELAI_VERIFICATION_SESSION = 300
 ROUTES_PUBLIQUES = roles.ENDPOINTS_PUBLICS
 
 initialiser_base()
@@ -53,6 +58,14 @@ def restreindre_acces():
     connecte = current_user.is_authenticated or session.get("connecte")
     if not connecte:
         return redirect(url_for("login"))
+
+    if not session_valide():
+        session.clear()
+        if request.endpoint in roles.ENDPOINTS_HTML and request.method == "GET":
+            return redirect(url_for("login"))
+        return jsonify(
+            {"success": False, "error": "Session expirée : reconnectez-vous"}
+        ), 403
 
     role = session.get("user_role")
     page = roles.PAGE_PAR_ENDPOINT.get(request.endpoint)
@@ -82,6 +95,16 @@ def injecter_contexte():
         ],
         "modules_actifs": actifs,
     }
+
+
+def session_valide():
+    """L'utilisateur de la session existe-t-il toujours ?"""
+    if time.time() - session.get("verifie_le", 0) < DELAI_VERIFICATION_SESSION:
+        return True
+    if utilisateur_par_id(session.get("user_id")) is None:
+        return False
+    session["verifie_le"] = time.time()
+    return True
 
 
 def page_accueil(role):
@@ -143,6 +166,7 @@ def login():
         session["user_name"] = utilisateur["nom"]
         session["user_email"] = utilisateur["email"]
         session["user_role"] = utilisateur["nom_role"]
+        session["verifie_le"] = time.time()
         session.permanent = True
         app.permanent_session_lifetime = (
             timedelta(days=30) if se_souvenir else timedelta(hours=2)

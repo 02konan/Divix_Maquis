@@ -690,3 +690,57 @@ def test_conversion_des_types_mysql():
     assert isinstance(_convertir(Decimal("1500.50")), float)
     assert _convertir(None) is None
 
+
+def test_categorie_disparue_le_dit_clairement(app_maquis):
+    """Un message générique obligeait à deviner quelle référence manquait."""
+    refus = _connecte_en(app_maquis, "Gérant").post(
+        "/menu/add",
+        data={"nom": "Plat", "categorie": "9999", "prix": "1000", "gere_stock": "0"},
+    ).get_json()
+
+    assert refus["success"] is False
+    assert "catégorie" in refus["error"]
+
+
+def test_session_pointant_un_utilisateur_disparu(app_maquis):
+    """Une base recréée laisse des sessions périmées : elles doivent se fermer."""
+    client = _connecte_en(app_maquis, "Gérant")
+    with client.session_transaction() as session:
+        session["user_id"] = 4242
+        session["verifie_le"] = 0
+
+    refus = client.post(
+        "/menu/add",
+        data={"nom": "Plat", "categorie": "1", "prix": "1000", "gere_stock": "0"},
+    )
+    assert refus.status_code == 403
+    assert "Session expirée" in refus.get_json()["error"]
+
+    # La session est vidée : la page suivante renvoie à la connexion.
+    reponse = client.get("/menu")
+    assert reponse.status_code == 302
+    assert "/login" in reponse.headers["Location"]
+
+
+def test_messages_des_contraintes_de_base():
+    """Chaque clé étrangère nomme ce qui manque, sans exposer le SQL."""
+    from pymysql.err import IntegrityError
+
+    from backend.database import message_erreur
+
+    doublon = IntegrityError(1062, "Duplicate entry 'Grillades' for key 'nom'")
+    assert message_erreur(doublon) == "« Grillades » existe déjà."
+
+    for colonne, extrait in [
+        ("id_categorie", "catégorie"),
+        ("id_utilisateur", "session"),
+        ("id_article", "article"),
+    ]:
+        erreur = IntegrityError(
+            1452,
+            "Cannot add or update a child row: a foreign key constraint fails "
+            f"(`base`.`articles`, CONSTRAINT `fk` FOREIGN KEY (`{colonne}`) "
+            "REFERENCES `autre` (`id`))",
+        )
+        assert extrait in message_erreur(erreur).lower()
+

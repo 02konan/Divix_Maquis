@@ -1,4 +1,5 @@
 
+import logging
 import os
 import re
 import threading
@@ -238,21 +239,43 @@ CODE_BASE_INCONNUE = 1049  # ER_BAD_DB_ERROR
 
 MOTIF_DOUBLON = re.compile(r"Duplicate entry '(.*)' for key")
 MOTIF_COLONNE_LONGUE = re.compile(r"Data too long for column '(\w+)'")
+MOTIF_CLE_ETRANGERE = re.compile(r"FOREIGN KEY \(`(\w+)`\)")
+
+# La colonne fautive dit précisément ce qui manque : un message générique
+# obligeait à deviner entre la catégorie, l'utilisateur ou la table.
+MESSAGES_CLE_ETRANGERE = {
+    "id_categorie": "Cette catégorie n'existe plus : rechargez la page.",
+    "id_utilisateur": "Votre session n'est plus valide : reconnectez-vous.",
+    "id_article": "Cet article n'existe plus : rechargez la page.",
+    "id_commande": "Cette commande n'existe plus : rechargez la page.",
+    "id_table": "Cette table n'existe plus : rechargez la page.",
+    "id_role": "Ce rôle n'existe pas.",
+}
+
+journal = logging.getLogger(__name__)
 
 
 def message_erreur(erreur):
     """Traduit une erreur MySQL en message affichable ; laisse passer le reste.
 
     Sans cela l'interface affiche des tuples bruts du type
-    `(1062, "Duplicate entry '1' for key 'numero'")`.
+    `(1062, "Duplicate entry '1' for key 'numero'")`. L'erreur technique part
+    dans les journaux : masquée à l'écran, elle resterait sinon introuvable.
     """
+    if isinstance(erreur, pymysql.MySQLError):
+        journal.warning("Erreur MySQL : %s", erreur)
+
     if isinstance(erreur, pymysql.err.IntegrityError):
         detail = str(erreur)
         doublon = MOTIF_DOUBLON.search(detail)
         if doublon:
             return f"« {doublon.group(1)} » existe déjà."
         if "foreign key constraint fails" in detail:
-            return "Référence introuvable ou encore utilisée ailleurs."
+            colonne = MOTIF_CLE_ETRANGERE.search(detail)
+            return MESSAGES_CLE_ETRANGERE.get(
+                colonne.group(1) if colonne else "",
+                "Référence introuvable ou encore utilisée ailleurs.",
+            )
         return "Enregistrement refusé : contrainte de base non respectée."
     if isinstance(erreur, pymysql.err.DataError):
         colonne = MOTIF_COLONNE_LONGUE.search(str(erreur))
