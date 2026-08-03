@@ -92,7 +92,7 @@ const Divix = {
         conteneur.innerHTML = `
             <tr class="line-nothing">
                 <td colspan="${colonnes}" class="text-center py-5 nothing">
-                    <i class="bi bi-inbox fs-1 text-muted"></i>
+                    <i class="bxf bx-inbox fs-1 text-muted"></i>
                     <p class="text-muted mt-2 mb-0">${Divix.echapper(message)}</p>
                 </td>
             </tr>`;

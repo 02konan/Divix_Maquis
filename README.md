@@ -167,6 +167,25 @@ en `SELECT ... FOR UPDATE`.
 Un article porte un indicateur `gere_stock` : les boissons sont décomptées à la vente,
 les plats sont préparés à la commande et ne consomment pas de stock.
 
+## Librairies embarquées
+
+Tout ce dont l'interface a besoin est dans `static/vendor/` (680 Ko) : Bootstrap,
+SweetAlert2, Chart.js, la police Outfit et les icônes. Aucune requête ne sort vers
+l'extérieur — un test le vérifie.
+
+Les icônes ne sont pas trois polices Boxicons complètes mais **seulement les treize
+réellement utilisées**, chacune en masque SVG teinté par la couleur du texte, soit
+6 Ko au lieu de plusieurs centaines. Pour en ajouter une : poser la classe dans le
+gabarit puis relancer
+
+```bash
+python outils/generer_icones.py
+```
+
+Le script refuse une classe qui n'existe pas dans Boxicons 3, et un test échoue si
+une icône posée dans un gabarit n'a pas de règle : une icône manquante ne s'affiche
+pas, sans rien signaler.
+
 ## Tests
 
 ```bash
@@ -214,7 +233,6 @@ par le client est ignoré, et le cycle d'encaissement partiel puis total.
   dans `static/uploads/` et disparaissent à chaque redéploiement ou réveil du service.
   Il faut un disque persistant, ou un stockage externe, pour les conserver.
 - Sauvegarder régulièrement la base : `mysqldump divix_maquis | gzip > sauvegarde.sql.gz`.
-- Les librairies d'interface (Bootstrap, SweetAlert2, Chart.js, Boxicons) sont chargées
-  depuis des CDN, comme dans Divix SysPaie. Si le maquis a une connexion instable,
-  il vaut mieux les héberger localement dans `static/vendor/` : l'interface reste
-  utilisable même sans internet.
+- Les librairies d'interface sont servies **depuis le serveur**, pas depuis des CDN :
+  l'interface s'affiche même avec une connexion instable, et ne dépend d'aucun tiers
+  (voir « Librairies embarquées »).

@@ -946,3 +946,65 @@ def test_gestion_des_comptes_reservee_au_gerant(app_maquis):
             data={"nom": "Z", "email": "z@z.ci", "mot_de_passe": "zzzzzz", "id_role": "1"},
         ).status_code == 403
 
+
+# ----------------------------------------------------------------------------
+# RESSOURCES SERVIES LOCALEMENT
+# ----------------------------------------------------------------------------
+
+
+def _fichiers_front():
+    sources = list((RACINE / "templates").rglob("*.html"))
+    sources += list((RACINE / "static/js").glob("*.js"))
+    sources += [RACINE / "backend/roles.py"]
+    return sources
+
+
+def test_aucune_ressource_chargee_depuis_un_cdn():
+    """Le maquis doit rester utilisable avec une connexion instable."""
+    import re
+
+    motif = re.compile(r"""(?:src|href)=["']https?://([^/"']+)""")
+    externes = set()
+    for fichier in (RACINE / "templates").rglob("*.html"):
+        externes.update(motif.findall(fichier.read_text(encoding="utf-8")))
+
+    assert externes == set(), f"ressources externes : {sorted(externes)}"
+
+
+def test_toutes_les_icones_utilisees_sont_embarquees():
+    """Une icône absente de la feuille ne s'affiche pas — sans rien signaler."""
+    import re
+
+    feuille = (RACINE / "static/vendor/boxicons/boxicons.css").read_text(encoding="utf-8")
+    motif = re.compile(r"\b(bxf|bx|bxb) (bx-[a-z0-9-]+)")
+
+    utilisees = set()
+    for fichier in _fichiers_front():
+        utilisees.update(motif.findall(fichier.read_text(encoding="utf-8")))
+
+    assert utilisees, "aucune icône relevée : le motif de détection est cassé"
+    absentes = [
+        f"{prefixe} {classe}"
+        for prefixe, classe in sorted(utilisees)
+        if f".{prefixe}.{classe} {{" not in feuille
+    ]
+    assert not absentes, (
+        f"icônes sans règle : {absentes} — relancer outils/generer_icones.py"
+    )
+
+
+def test_fichiers_embarques_presents():
+    attendus = [
+        "vendor/bootstrap/bootstrap.min.css",
+        "vendor/bootstrap/bootstrap.bundle.min.js",
+        "vendor/sweetalert2/sweetalert2.all.min.js",
+        "vendor/chartjs/chart.umd.js",
+        "vendor/boxicons/boxicons.css",
+        "vendor/outfit/outfit.css",
+        "vendor/outfit/files/outfit-latin-wght-normal.woff2",
+    ]
+    for chemin in attendus:
+        fichier = RACINE / "static" / chemin
+        assert fichier.exists(), f"manquant : {chemin}"
+        assert fichier.stat().st_size > 0
+
