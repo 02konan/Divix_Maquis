@@ -345,6 +345,8 @@ COMPTES = {
     "Gérant": ("admin@divixmaquis.ci", "admin123"),
     "Caissier": ("caisse@divixmaquis.ci", "caisse123"),
     "Serveur": ("serveur@divixmaquis.ci", "serveur123"),
+    "Serveur bar": ("bar@divixmaquis.ci", "bar123"),
+    "Serveur restaurant": ("resto@divixmaquis.ci", "resto123"),
 }
 
 
@@ -743,4 +745,204 @@ def test_messages_des_contraintes_de_base():
             "REFERENCES `autre` (`id`))",
         )
         assert extrait in message_erreur(erreur).lower()
+
+
+# ----------------------------------------------------------------------------
+# SERVEURS DU BAR ET DU RESTAURANT
+# ----------------------------------------------------------------------------
+
+
+def _premier_article(client):
+    return client.get("/menu/disponibles").get_json()["data"][0]
+
+
+def _ouvrir_ticket(client, article, id_table="5"):
+    return client.post(
+        "/commande/add",
+        data={
+            "id_table": id_table,
+            "type_service": "Sur place",
+            "articles": f'[{{"id_article": {article["id"]}, "quantite": 1}}]',
+        },
+    ).get_json()
+
+
+@pytest.mark.parametrize(
+    "role, type_attendu",
+    [("Serveur bar", "Bar"), ("Serveur restaurant", "Cuisine")],
+)
+def test_chaque_serveur_ne_voit_que_sa_carte(app_maquis, role, type_attendu):
+    client = _connecte_en(app_maquis, role)
+
+    carte = client.get("/menu/list").get_json()
+    types = {article["type_categorie"] for article in carte["data"]}
+    assert types == {type_attendu}
+    assert carte["counter"]["total_articles"] == len(carte["data"])
+
+    proposables = client.get("/menu/disponibles").get_json()["data"]
+    assert proposables
+    assert len(proposables) < 22
+
+    # Le gérant, lui, voit toute la carte.
+    complete = _connecte_en(app_maquis, "Gérant").get("/menu/list").get_json()["data"]
+    assert len(complete) > len(carte["data"])
+
+
+def test_commande_hors_domaine_refusee(app_maquis):
+    """Le contrôle est côté serveur : un formulaire forgé ne doit pas passer."""
+    bar = _connecte_en(app_maquis, "Serveur bar")
+    plat = _premier_article(_connecte_en(app_maquis, "Serveur restaurant"))
+
+    refus = bar.post(
+        "/commande/add",
+        data={
+            "type_service": "Sur place",
+            "articles": f'[{{"id_article": {plat["id"]}, "quantite": 1}}]',
+        },
+    )
+    assert refus.status_code == 400
+    assert "ne fait pas partie de votre carte" in refus.get_json()["error"]
+
+
+def test_tickets_separes_entre_bar_et_restaurant(app_maquis):
+    """Une même table porte deux tickets, chacun cloisonné à son serveur."""
+    bar = _connecte_en(app_maquis, "Serveur bar")
+    resto = _connecte_en(app_maquis, "Serveur restaurant")
+
+    ticket_bar = _ouvrir_ticket(bar, _premier_article(bar))
+    ticket_resto = _ouvrir_ticket(resto, _premier_article(resto))
+    assert ticket_bar["success"] and ticket_resto["success"]
+    assert ticket_bar["reference"] != ticket_resto["reference"]
+
+    # Chacun consulte le sien et pas celui de l'autre.
+    assert bar.get(f"/commande/{ticket_bar['reference']}").status_code == 200
+    assert bar.get(f"/commande/{ticket_resto['reference']}").status_code == 404
+    assert resto.get(f"/commande/{ticket_bar['reference']}").status_code == 404
+
+    refus = bar.post(
+        f"/commande/{ticket_resto['reference']}/statut", data={"statut": "Servie"}
+    )
+    assert refus.status_code == 400
+    assert "pas le vôtre" in refus.get_json()["error"]
+
+    # La caisse, elle, encaisse les deux.
+    caisse = _connecte_en(app_maquis, "Caissier")
+    encaissables = {
+        commande["reference"]
+        for commande in caisse.get("/caisse/encaissables").get_json()["data"]
+    }
+    assert {ticket_bar["reference"], ticket_resto["reference"]} <= encaissables
+
+
+# ----------------------------------------------------------------------------
+# GESTION DES COMPTES
+# ----------------------------------------------------------------------------
+
+
+def test_roles_declares_presents_en_base(app_maquis):
+    """Une base déjà en service doit recevoir les rôles ajoutés depuis."""
+    from backend import lectures, roles
+
+    en_base = {role["nom"] for role in lectures.liste_roles()}
+    assert set(roles.PAGES_PAR_ROLE) <= en_base
+
+
+def test_le_gerant_cree_un_compte_utilisable(app_maquis):
+    from backend import lectures
+
+    gerant = _connecte_en(app_maquis, "Gérant")
+    id_role_bar = next(
+        role["id"] for role in lectures.liste_roles() if role["nom"] == "Serveur bar"
+    )
+
+    creation = gerant.post(
+        "/administration/utilisateurs",
+        data={
+            "nom": "Koffi",
+            "email": "koffi@maquis.ci",
+            "mot_de_passe": "koffi123",
+            "id_role": id_role_bar,
+        },
+    ).get_json()
+    assert creation["success"] is True
+
+    nouveau = app_maquis.test_client()
+    connexion = nouveau.post(
+        "/login", data={"email": "koffi@maquis.ci", "password": "koffi123"}
+    ).get_json()
+    assert connexion["success"] is True
+
+    carte = nouveau.get("/menu/list").get_json()["data"]
+    assert {article["type_categorie"] for article in carte} == {"Bar"}
+
+
+def test_creation_de_compte_verifie_les_saisies(app_maquis):
+    gerant = _connecte_en(app_maquis, "Gérant")
+
+    court = gerant.post(
+        "/administration/utilisateurs",
+        data={"nom": "X", "email": "x@maquis.ci", "mot_de_passe": "123", "id_role": "1"},
+    )
+    assert court.status_code == 400
+    assert "6 caractères" in court.get_json()["error"]
+
+    doublon = gerant.post(
+        "/administration/utilisateurs",
+        data={
+            "nom": "Bis",
+            "email": "admin@divixmaquis.ci",
+            "mot_de_passe": "motdepasse",
+            "id_role": "1",
+        },
+    )
+    assert doublon.status_code == 400
+    assert "existe déjà" in doublon.get_json()["error"]
+
+
+def test_le_gerant_ne_peut_pas_se_verrouiller(app_maquis):
+    from backend import lectures
+
+    gerant = _connecte_en(app_maquis, "Gérant")
+    moi = next(
+        utilisateur["id"]
+        for utilisateur in lectures.liste_utilisateurs()
+        if utilisateur["email"] == "admin@divixmaquis.ci"
+    )
+
+    assert gerant.post(
+        f"/administration/utilisateurs/{moi}/actif", data={"actif": "0"}
+    ).status_code == 400
+    assert gerant.post(
+        f"/administration/utilisateurs/{moi}/role", data={"id_role": "3"}
+    ).status_code == 400
+
+
+def test_compte_desactive_ne_se_connecte_plus(app_maquis):
+    from backend import lectures
+
+    gerant = _connecte_en(app_maquis, "Gérant")
+    serveur = next(
+        utilisateur["id"]
+        for utilisateur in lectures.liste_utilisateurs()
+        if utilisateur["email"] == "serveur@divixmaquis.ci"
+    )
+
+    assert gerant.post(
+        f"/administration/utilisateurs/{serveur}/actif", data={"actif": "0"}
+    ).get_json()["success"] is True
+
+    refus = app_maquis.test_client().post(
+        "/login", data={"email": "serveur@divixmaquis.ci", "password": "serveur123"}
+    )
+    assert refus.status_code == 401
+
+
+def test_gestion_des_comptes_reservee_au_gerant(app_maquis):
+    for role in ("Serveur bar", "Caissier"):
+        client = _connecte_en(app_maquis, role)
+        assert client.get("/administration").status_code == 302
+        assert client.post(
+            "/administration/utilisateurs",
+            data={"nom": "Z", "email": "z@z.ci", "mot_de_passe": "zzzzzz", "id_role": "1"},
+        ).status_code == 403
 

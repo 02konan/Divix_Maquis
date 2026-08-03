@@ -44,6 +44,8 @@ Comptes de démonstration :
 | Gérant   | `admin@divixmaquis.ci`     | `admin123`   |
 | Caissier | `caisse@divixmaquis.ci`    | `caisse123`  |
 | Serveur  | `serveur@divixmaquis.ci`   | `serveur123` |
+| Serveur bar | `bar@divixmaquis.ci`    | `bar123`     |
+| Serveur restaurant | `resto@divixmaquis.ci` | `resto123` |
 
 > Changez ces mots de passe avant toute mise en production, et définissez `SECRET_KEY`
 > dans le fichier `.env`.
@@ -80,6 +82,30 @@ donc un basculement peut mettre ce délai à se propager aux autres workers guni
 | | *(et la page Administration)* | | | | | | |
 | **Caissier** | — | ✓ | ✓ | — | — | ✓ | — |
 | **Serveur**  | — | ✓ | ✓ | lecture | — | — | — |
+| **Serveur bar** | — | ✓ | ✓ | lecture | — | — | — |
+| **Serveur restaurant** | — | ✓ | ✓ | lecture | — | — | — |
+
+### Bar et restaurant
+
+Beaucoup d'établissements ont deux équipes : les serveurs du maquis pour la boisson,
+ceux du restaurant pour la nourriture. Les rôles **Serveur bar** et **Serveur
+restaurant** suivent ce partage, qui reprend le type déjà porté par les catégories
+(`Bar` ou `Cuisine`) :
+
+- chacun ne voit que sa moitié de la carte, et le sélecteur d'articles de la prise
+  de commande est filtré de la même façon ;
+- une commande contenant un article de l'autre côté est **refusée côté serveur**,
+  pas seulement masquée dans l'interface ;
+- une table porte alors **deux tickets distincts**, un par équipe, chacun visible et
+  modifiable par son seul serveur. La caisse, elle, les voit et les encaisse tous ;
+- le rôle **Serveur** sans mention reste non cloisonné, pour un maquis à équipe unique.
+
+### Comptes du personnel
+
+La page Administration porte aussi la gestion des utilisateurs : créer un compte,
+changer un rôle, réinitialiser un mot de passe, désactiver un employé qui part — son
+historique de commandes est conservé. Le gérant ne peut ni se désactiver ni changer
+son propre rôle, pour ne pas se verrouiller dehors.
 
 La répartition se lit et se modifie dans `backend/roles.py`. Le contrôle porte sur les
 endpoints Flask, donc il couvre les pages **et** les appels de données qu'elles font :

@@ -1,11 +1,16 @@
 """Toutes les écritures : commandes, encaissements, menu, stock, dépenses."""
 
+from werkzeug.security import generate_password_hash
+
+from backend.auth import creer_utilisateur
 from backend.database import (
     connexion,
     executer,
     generer_reference,
     message_erreur,
 )
+
+LONGUEUR_MOT_DE_PASSE = 6
 
 MODES_PAIEMENT = ["Espèces", "Orange Money", "MTN MoMo", "Moov Money", "Wave", "Carte"]
 TYPES_SERVICE = ["Sur place", "À emporter", "Livraison"]
@@ -187,6 +192,31 @@ def enregistrer_mouvement(id_article, type_mouvement, quantite, motif, id_utilis
 # ----------------------------------------------------------------------------
 
 
+def refuser_hors_domaine(conn, articles, domaines):
+    """Un serveur du bar ne commande pas de nourriture, et réciproquement.
+
+    Le contrôle est ici, et pas seulement dans la carte affichée : un
+    formulaire forgé enverrait n'importe quel identifiant d'article.
+    """
+    if not domaines:
+        return
+
+    ids = sorted({int(article["id_article"]) for article in articles})
+    marqueurs_ids = ", ".join(["%s"] * len(ids))
+    marqueurs_domaines = ", ".join(["%s"] * len(domaines))
+    intrus = conn.execute(
+        f"""SELECT a.nom FROM articles a
+            LEFT JOIN categories c ON a.id_categorie = c.id
+            WHERE a.id IN ({marqueurs_ids})
+              AND (c.type IS NULL OR c.type NOT IN ({marqueurs_domaines}))""",
+        (*ids, *domaines),
+    ).fetchall()
+
+    if intrus:
+        noms = ", ".join(ligne["nom"] for ligne in intrus)
+        raise ValueError(f"{noms} ne fait pas partie de votre carte")
+
+
 def verrouiller_articles(conn, articles):
     """Verrouille les articles d'une commande, toujours dans l'ordre des id.
 
@@ -211,6 +241,7 @@ def creer_commande(
     remise,
     commentaire,
     articles,
+    domaines=None,
 ):
     """Ouvre un ticket, décrémente le stock des boissons et occupe la table."""
     if not articles:
@@ -222,6 +253,7 @@ def creer_commande(
 
     try:
         with connexion() as conn:
+            refuser_hors_domaine(conn, articles, domaines)
             verrouiller_articles(conn, articles)
             montant_total = 0
             lignes = []
@@ -339,7 +371,7 @@ def creer_commande(
         return {"success": False, "error": message_erreur(erreur)}
 
 
-def changer_statut_commande(reference, statut):
+def changer_statut_commande(reference, statut, domaines=None):
     if statut not in STATUTS_COMMANDE:
         return {"success": False, "error": "Statut de commande invalide"}
 
@@ -350,6 +382,8 @@ def changer_statut_commande(reference, statut):
             ).fetchone()
             if not commande:
                 return {"success": False, "error": "Commande introuvable"}
+            if not commande_du_domaine(conn, commande["id"], domaines):
+                return {"success": False, "error": "Ce ticket n'est pas le vôtre"}
 
             if statut in ("Payée", "Annulée"):
                 conn.execute(
@@ -369,6 +403,22 @@ def changer_statut_commande(reference, statut):
         return {"success": False, "error": message_erreur(erreur)}
 
     return {"success": True}
+
+
+def commande_du_domaine(conn, id_commande, domaines):
+    """Le ticket ne contient-il que des articles du domaine du rôle ?"""
+    if not domaines:
+        return True
+
+    marqueurs = ", ".join(["%s"] * len(domaines))
+    ligne = conn.execute(
+        f"""SELECT COUNT(*) AS lignes FROM lignes_commande l
+            JOIN articles a ON l.id_article = a.id
+            JOIN categories c ON a.id_categorie = c.id
+            WHERE l.id_commande = %s AND c.type IN ({marqueurs})""",
+        (id_commande, *domaines),
+    ).fetchone()
+    return ligne["lignes"] > 0
 
 
 def liberer_table(conn, id_table):
@@ -523,5 +573,79 @@ def creer_depense(
             )
 
         return {"success": True, "reference": reference}
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
+
+
+# ----------------------------------------------------------------------------
+# UTILISATEURS
+# ----------------------------------------------------------------------------
+
+
+def creer_compte(nom, email, mot_de_passe, id_role):
+    if not nom or not email or not mot_de_passe or not id_role:
+        return {
+            "success": False,
+            "error": "Nom, email, mot de passe et rôle sont obligatoires",
+        }
+    if len(mot_de_passe) < LONGUEUR_MOT_DE_PASSE:
+        return {
+            "success": False,
+            "error": f"Le mot de passe doit faire au moins {LONGUEUR_MOT_DE_PASSE} caractères",
+        }
+
+    try:
+        id_utilisateur = creer_utilisateur(nom, email, mot_de_passe, int(id_role))
+        return {"success": True, "id_utilisateur": id_utilisateur}
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
+
+
+def basculer_compte(id_utilisateur, actif, id_courant):
+    """Active ou désactive un compte, sans permettre de se verrouiller soi-même."""
+    if not actif and int(id_utilisateur) == int(id_courant or 0):
+        return {
+            "success": False,
+            "error": "Vous ne pouvez pas désactiver votre propre compte",
+        }
+    try:
+        executer(
+            "UPDATE utilisateurs SET actif = %s WHERE id = %s",
+            (1 if actif else 0, int(id_utilisateur)),
+        )
+        return {"success": True}
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
+
+
+def changer_role(id_utilisateur, id_role, id_courant):
+    """Le gérant ne peut pas se retirer à lui-même l'accès à l'administration."""
+    if int(id_utilisateur) == int(id_courant or 0):
+        return {
+            "success": False,
+            "error": "Vous ne pouvez pas changer votre propre rôle",
+        }
+    try:
+        executer(
+            "UPDATE utilisateurs SET id_role = %s WHERE id = %s",
+            (int(id_role), int(id_utilisateur)),
+        )
+        return {"success": True}
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
+
+
+def reinitialiser_mot_de_passe(id_utilisateur, mot_de_passe):
+    if not mot_de_passe or len(mot_de_passe) < LONGUEUR_MOT_DE_PASSE:
+        return {
+            "success": False,
+            "error": f"Le mot de passe doit faire au moins {LONGUEUR_MOT_DE_PASSE} caractères",
+        }
+    try:
+        executer(
+            "UPDATE utilisateurs SET mot_de_passe = %s WHERE id = %s",
+            (generate_password_hash(mot_de_passe), int(id_utilisateur)),
+        )
+        return {"success": True}
     except Exception as erreur:
         return {"success": False, "error": message_erreur(erreur)}

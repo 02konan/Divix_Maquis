@@ -4,12 +4,14 @@ from datetime import date, datetime, timedelta
 from backend.auth import creer_utilisateur
 from backend.database import valeur,initialiser_base,connexion
 
-ROLES = ["Gérant", "Caissier", "Serveur"]
+ROLES = ["Gérant", "Caissier", "Serveur", "Serveur bar", "Serveur restaurant"]
 
 UTILISATEURS = [
-    ("Konan Divix", "admin@divixmaquis.ci", "admin123", 1),
-    ("Awa Traoré", "caisse@divixmaquis.ci", "caisse123", 2),
-    ("Yao Serge", "serveur@divixmaquis.ci", "serveur123", 3),
+    ("Konan Divix", "admin@divixmaquis.ci", "admin123", "Gérant"),
+    ("Awa Traoré", "caisse@divixmaquis.ci", "caisse123", "Caissier"),
+    ("Yao Serge", "serveur@divixmaquis.ci", "serveur123", "Serveur"),
+    ("Ismaël Bar", "bar@divixmaquis.ci", "bar123", "Serveur bar"),
+    ("Mariam Cuisine", "resto@divixmaquis.ci", "resto123", "Serveur restaurant"),
 ]
 
 CATEGORIES = [
@@ -109,8 +111,14 @@ def peupler():
         )
         conn.commit()
 
-    for nom, email, mot_de_passe, id_role in UTILISATEURS:
-        creer_utilisateur(nom, email, mot_de_passe, id_role)
+    with connexion() as conn:
+        roles_par_nom = {
+            ligne["nom"]: ligne["id"]
+            for ligne in conn.execute("SELECT id, nom FROM roles")
+        }
+
+    for nom, email, mot_de_passe, role in UTILISATEURS:
+        creer_utilisateur(nom, email, mot_de_passe, roles_par_nom[role])
 
     with connexion() as conn:
         categories = {

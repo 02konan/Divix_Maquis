@@ -20,16 +20,29 @@ PAGES = [
 TOUTES_LES_PAGES = {page["cle"] for page in PAGES}
 
 PAGES_PAR_ROLE = {
-    # Seul le gérant administre les fonctionnalités.
+    # Seul le gérant administre les fonctionnalités et les comptes.
     "Gérant": TOUTES_LES_PAGES,
     "Caissier": {"salle", "commande", "caisse"},
     "Serveur": {"salle", "commande", "menu"},
+    "Serveur bar": {"salle", "commande", "menu"},
+    "Serveur restaurant": {"salle", "commande", "menu"},
+}
+
+# Le maquis et le restaurant ont des serveurs distincts : les uns servent la
+# boisson, les autres la nourriture. Le partage suit le type des catégories,
+# déjà porté par la base (« Bar » ou « Cuisine »). Un rôle absent de ce tableau
+# n'est pas cloisonné et voit toute la carte.
+DOMAINES_PAR_ROLE = {
+    "Serveur bar": ("Bar",),
+    "Serveur restaurant": ("Cuisine",),
 }
 
 # Pages consultables sans pouvoir y écrire : le serveur voit la carte et les
 # prix, mais ne crée ni article ni catégorie.
 LECTURE_SEULE_PAR_ROLE = {
     "Serveur": {"menu"},
+    "Serveur bar": {"menu"},
+    "Serveur restaurant": {"menu"},
 }
 
 # Chaque endpoint est rattaché à la page dont il dépend. `menu_disponibles`
@@ -65,6 +78,10 @@ PAGE_PAR_ENDPOINT = {
     "depense_add": "depense",
     "administration": "administration",
     "administration_modules": "administration",
+    "administration_utilisateur_add": "administration",
+    "administration_utilisateur_actif": "administration",
+    "administration_utilisateur_role": "administration",
+    "administration_utilisateur_motdepasse": "administration",
 }
 
 ENDPOINTS_PUBLICS = {"login", "static"}
@@ -73,6 +90,27 @@ ENDPOINTS_TOUJOURS_AUTORISES = {"logout"}
 # Endpoints qui rendent une page : un refus s'y traduit par une redirection
 # plutôt que par du JSON.
 ENDPOINTS_HTML = {page["cle"] for page in PAGES} | {"commande"}
+
+
+def initialiser():
+    """Crée en base les rôles déclarés ici qui n'y sont pas encore.
+
+    Une base déjà en service ne connaît pas les rôles ajoutés depuis : sans
+    cela, le gérant ne pourrait pas les attribuer à ses employés.
+    """
+    from backend.database import connexion
+
+    with connexion() as conn:
+        conn.executemany(
+            "INSERT IGNORE INTO roles (nom) VALUES (%s)",
+            [(nom,) for nom in PAGES_PAR_ROLE],
+        )
+        conn.commit()
+
+
+def domaines(role):
+    """Types de catégories que le rôle peut voir et commander ; None = tout."""
+    return DOMAINES_PAR_ROLE.get(role)
 
 
 def pages_autorisees(role):

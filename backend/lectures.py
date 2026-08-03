@@ -4,6 +4,17 @@ from datetime import date, timedelta
 
 from backend.database import lire_tout, lire_un
 
+
+def _restriction(domaines, alias="c"):
+    """Fragment SQL limitant aux types de catégories du rôle (« Bar », « Cuisine »).
+
+    Renvoie une condition vide quand le rôle n'est pas cloisonné.
+    """
+    if not domaines:
+        return "", ()
+    marqueurs = ", ".join(["%s"] * len(domaines))
+    return f" AND {alias}.type IN ({marqueurs})", tuple(domaines)
+
 # ----------------------------------------------------------------------------
 # SALLE
 # ----------------------------------------------------------------------------
@@ -44,48 +55,62 @@ def table_par_id(id_table):
 # ----------------------------------------------------------------------------
 
 
-def liste_categories():
-    return lire_tout("SELECT id, nom, type FROM categories ORDER BY type, nom")
-
-
-def liste_articles():
+def liste_categories(domaines=None):
+    condition, params = _restriction(domaines, alias="categories")
     return lire_tout(
-        """
+        f"SELECT id, nom, type FROM categories WHERE 1 = 1{condition}"
+        " ORDER BY type, nom",
+        params,
+    )
+
+
+def liste_articles(domaines=None):
+    condition, params = _restriction(domaines)
+    return lire_tout(
+        f"""
         SELECT a.id, a.reference, a.nom, a.prix, a.cout_revient, a.gere_stock,
                a.stock, a.seuil_alerte, a.disponible, a.image, a.date_creation,
                COALESCE(c.nom, 'Sans catégorie') AS categorie,
                COALESCE(c.type, 'Cuisine') AS type_categorie
         FROM articles a
         LEFT JOIN categories c ON a.id_categorie = c.id
+        WHERE 1 = 1{condition}
         ORDER BY a.date_creation DESC, a.id DESC
-        """
+        """,
+        params,
     )
 
 
-def articles_disponibles():
+def articles_disponibles(domaines=None):
     """Articles proposables à la commande (disponibles et en stock si géré)."""
+    condition, params = _restriction(domaines)
     return lire_tout(
-        """
+        f"""
         SELECT a.id, a.reference, a.nom, a.prix, a.gere_stock, a.stock,
                COALESCE(c.nom, 'Sans catégorie') AS categorie
         FROM articles a
         LEFT JOIN categories c ON a.id_categorie = c.id
-        WHERE a.disponible = 1 AND (a.gere_stock = 0 OR a.stock > 0)
+        WHERE a.disponible = 1 AND (a.gere_stock = 0 OR a.stock > 0){condition}
         ORDER BY c.nom, a.nom
-        """
+        """,
+        params,
     )
 
 
-def compteurs_menu():
+def compteurs_menu(domaines=None):
+    condition, params = _restriction(domaines)
     return lire_un(
-        """
+        f"""
         SELECT COUNT(*) AS total_articles,
-               COALESCE(SUM(disponible = 0 OR (gere_stock = 1 AND stock <= 0)), 0)
+               COALESCE(SUM(a.disponible = 0 OR (a.gere_stock = 1 AND a.stock <= 0)), 0)
                    AS indisponibles,
-               COALESCE(SUM(gere_stock = 1 AND stock > 0 AND stock <= seuil_alerte), 0)
-                   AS stock_faible
-        FROM articles
-        """
+               COALESCE(SUM(a.gere_stock = 1 AND a.stock > 0
+                            AND a.stock <= a.seuil_alerte), 0) AS stock_faible
+        FROM articles a
+        LEFT JOIN categories c ON a.id_categorie = c.id
+        WHERE 1 = 1{condition}
+        """,
+        params,
     )
 
 
@@ -158,9 +183,25 @@ def derniers_mouvements(limite=50):
 # ----------------------------------------------------------------------------
 
 
-def liste_commandes(limite=200):
+def _commande_du_domaine(domaines, alias="c"):
+    """Ticket ne contenant que des articles du domaine du rôle."""
+    if not domaines:
+        return "", ()
+    marqueurs = ", ".join(["%s"] * len(domaines))
+    return (
+        f""" AND EXISTS (SELECT 1 FROM lignes_commande l
+                          JOIN articles a ON l.id_article = a.id
+                          JOIN categories cat ON a.id_categorie = cat.id
+                         WHERE l.id_commande = {alias}.id
+                           AND cat.type IN ({marqueurs}))""",
+        tuple(domaines),
+    )
+
+
+def liste_commandes(limite=200, domaines=None):
+    condition, params = _commande_du_domaine(domaines)
     commandes = lire_tout(
-        """
+        f"""
         SELECT c.id, c.reference, c.type_service, c.nom_client, c.couverts,
                c.statut, c.montant_total, c.remise, c.commentaire,
                c.date_commande, c.date_cloture,
@@ -171,10 +212,11 @@ def liste_commandes(limite=200):
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON c.id_utilisateur = u.id
+        WHERE 1 = 1{condition}
         ORDER BY c.id DESC
         LIMIT %s
         """,
-        (limite,),
+        (*params, limite),
     )
     resumes = resumes_articles([commande["id"] for commande in commandes])
     for commande in commandes:
@@ -212,9 +254,10 @@ def resumes_articles(ids_commande):
     }
 
 
-def detail_commande(reference):
+def detail_commande(reference, domaines=None):
+    condition, params = _commande_du_domaine(domaines)
     commande = lire_un(
-        """
+        f"""
         SELECT c.*, COALESCE(t.numero, '—') AS table_numero,
                COALESCE(u.nom, '—') AS serveur,
                COALESCE((SELECT SUM(montant) FROM paiements p
@@ -222,9 +265,9 @@ def detail_commande(reference):
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON c.id_utilisateur = u.id
-        WHERE c.reference = %s
+        WHERE c.reference = %s{condition}
         """,
-        (reference,),
+        (reference, *params),
     )
     if not commande:
         return None
@@ -253,21 +296,23 @@ def detail_commande(reference):
     return commande
 
 
-def compteurs_commandes():
+def compteurs_commandes(domaines=None):
+    condition, params = _commande_du_domaine(domaines)
     compteurs = lire_un(
-        """
+        f"""
         SELECT
-          (SELECT COUNT(*) FROM commandes
-            WHERE date_commande >= CURDATE()
-              AND date_commande < CURDATE() + INTERVAL 1 DAY) AS commandes_jour,
-          (SELECT COUNT(*) FROM commandes
-            WHERE statut IN ('En cours', 'Servie')) AS commandes_en_cours,
+          (SELECT COUNT(*) FROM commandes c
+            WHERE c.date_commande >= CURDATE()
+              AND c.date_commande < CURDATE() + INTERVAL 1 DAY{condition}) AS commandes_jour,
+          (SELECT COUNT(*) FROM commandes c
+            WHERE c.statut IN ('En cours', 'Servie'){condition}) AS commandes_en_cours,
           (SELECT COALESCE(SUM(c.montant_total - COALESCE(
                     (SELECT SUM(p.montant) FROM paiements p
                       WHERE p.id_commande = c.id), 0)), 0)
              FROM commandes c
-            WHERE c.statut IN ('En cours', 'Servie')) AS montant_impaye
-        """
+            WHERE c.statut IN ('En cours', 'Servie'){condition}) AS montant_impaye
+        """,
+        params * 3,
     )
     compteurs["montant_impaye"] = round(compteurs["montant_impaye"], 2)
     return compteurs
@@ -549,3 +594,24 @@ def calculer_pourcentage(courant, precedent):
     if precedent == 0:
         return 100 if courant > 0 else 0
     return round(((courant - precedent) / precedent) * 100, 1)
+
+
+# ----------------------------------------------------------------------------
+# UTILISATEURS
+# ----------------------------------------------------------------------------
+
+
+def liste_utilisateurs():
+    return lire_tout(
+        """
+        SELECT u.id, u.nom, u.email, u.actif, u.id_role, u.date_creation,
+               r.nom AS role
+        FROM utilisateurs u
+        JOIN roles r ON u.id_role = r.id
+        ORDER BY r.id, u.nom
+        """
+    )
+
+
+def liste_roles():
+    return lire_tout("SELECT id, nom FROM roles ORDER BY id")

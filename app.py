@@ -39,6 +39,7 @@ DELAI_VERIFICATION_SESSION = 300
 ROUTES_PUBLIQUES = roles.ENDPOINTS_PUBLICS
 
 initialiser_base()
+roles.initialiser()
 modules.initialiser()
 
 login_manager = LoginManager()
@@ -132,6 +133,10 @@ def enregistrer_image(champ="image"):
 
 def utilisateur_courant():
     return session.get("user_id")
+
+def domaines_courants():
+    """Types de catégories du rôle connecté ; None quand il voit toute la carte."""
+    return roles.domaines(session.get("user_role"))
 
 def nombre(valeur_brute, defaut=0):
     try:
@@ -297,7 +302,7 @@ def menu():
     return render_template(
         "menu.html",
         active_page="menu",
-        categories=lectures.liste_categories(),
+        categories=lectures.liste_categories(domaines_courants()),
         # Le serveur consulte la carte sans la modifier : inutile de lui montrer
         # des boutons qui répondraient 403. En revanche il commande, donc c'est
         # « Ajouter » qui s'affiche sur les plats — comme le verront les clients
@@ -313,15 +318,16 @@ def menu():
 
 @app.route("/menu/list")
 def menu_list():
-    articles = lectures.liste_articles()
+    domaines = domaines_courants()
+    articles = lectures.liste_articles(domaines)
     for article in articles:
         article["statut"] = lectures.statut_stock(article)
-    return jsonify({"data": articles, "counter": lectures.compteurs_menu()})
+    return jsonify({"data": articles, "counter": lectures.compteurs_menu(domaines)})
 
 
 @app.route("/menu/disponibles")
 def menu_disponibles():
-    return jsonify({"data": lectures.articles_disponibles()})
+    return jsonify({"data": lectures.articles_disponibles(domaines_courants())})
 
 
 @app.route("/menu/add", methods=["POST"])
@@ -434,10 +440,11 @@ def commande():
 
 @app.route("/commande/list")
 def commande_list():
+    domaines = domaines_courants()
     return jsonify(
         {
-            "data": lectures.liste_commandes(),
-            "counter": lectures.compteurs_commandes(),
+            "data": lectures.liste_commandes(domaines=domaines),
+            "counter": lectures.compteurs_commandes(domaines),
         }
     )
 
@@ -468,6 +475,7 @@ def commande_add():
         remise=nombre(request.form.get("remise")),
         commentaire=request.form.get("commentaire"),
         articles=articles,
+        domaines=domaines_courants(),
     )
 
     if not resultat["success"]:
@@ -477,7 +485,7 @@ def commande_add():
 
 @app.route("/commande/<reference>")
 def commande_detail(reference):
-    detail = lectures.detail_commande(reference)
+    detail = lectures.detail_commande(reference, domaines_courants())
     if not detail:
         return jsonify({"success": False, "error": "Commande introuvable"}), 404
     return jsonify({"success": True, "data": detail})
@@ -485,7 +493,9 @@ def commande_detail(reference):
 
 @app.route("/commande/<reference>/statut", methods=["POST"])
 def commande_statut(reference):
-    resultat = ecritures.changer_statut_commande(reference, request.form.get("statut"))
+    resultat = ecritures.changer_statut_commande(
+        reference, request.form.get("statut"), domaines_courants()
+    )
     return jsonify(resultat), 200 if resultat["success"] else 400
 
 
@@ -600,7 +610,12 @@ def depense_add():
 @app.route("/administration")
 def administration():
     return render_template(
-        "administration.html", active_page="administration", modules=modules.liste()
+        "administration.html",
+        active_page="administration",
+        modules=modules.liste(),
+        utilisateurs=lectures.liste_utilisateurs(),
+        roles_disponibles=lectures.liste_roles(),
+        id_courant=utilisateur_courant(),
     )
 
 
@@ -615,6 +630,48 @@ def administration_modules():
 
     etat = "activée" if actif else "désactivée"
     return jsonify({**resultat, "message": f"Fonctionnalité {etat}"})
+
+
+@app.route("/administration/utilisateurs", methods=["POST"])
+def administration_utilisateur_add():
+    resultat = ecritures.creer_compte(
+        nom=request.form.get("nom"),
+        email=request.form.get("email"),
+        mot_de_passe=request.form.get("mot_de_passe"),
+        id_role=request.form.get("id_role"),
+    )
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+    return jsonify({**resultat, "message": "Compte créé"})
+
+
+@app.route("/administration/utilisateurs/<int:id_utilisateur>/actif", methods=["POST"])
+def administration_utilisateur_actif(id_utilisateur):
+    actif = request.form.get("actif") == "1"
+    resultat = ecritures.basculer_compte(id_utilisateur, actif, utilisateur_courant())
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+    return jsonify({**resultat, "message": "Compte activé" if actif else "Compte désactivé"})
+
+
+@app.route("/administration/utilisateurs/<int:id_utilisateur>/role", methods=["POST"])
+def administration_utilisateur_role(id_utilisateur):
+    resultat = ecritures.changer_role(
+        id_utilisateur, request.form.get("id_role"), utilisateur_courant()
+    )
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+    return jsonify({**resultat, "message": "Rôle modifié"})
+
+
+@app.route("/administration/utilisateurs/<int:id_utilisateur>/motdepasse", methods=["POST"])
+def administration_utilisateur_motdepasse(id_utilisateur):
+    resultat = ecritures.reinitialiser_mot_de_passe(
+        id_utilisateur, request.form.get("mot_de_passe")
+    )
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+    return jsonify({**resultat, "message": "Mot de passe réinitialisé"})
 
 
 if __name__ == "__main__":
