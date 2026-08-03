@@ -23,7 +23,7 @@ CATEGORIES = [
     ("Eaux & Jus", "Bar"),
 ]
 
-# (nom, catégorie, prix, coût de revient, gère un stock, stock, seuil)
+
 ARTICLES = [
     ("Poulet braisé entier", "Grillades", 6000, 3500, 0, 0, 0),
     ("Demi-poulet braisé", "Grillades", 3500, 2000, 0, 0, 0),
@@ -34,19 +34,7 @@ ARTICLES = [
     ("Riz sauce graine", "Plats & Sauces", 1500, 800, 0, 0, 0),
     ("Foutou sauce claire", "Plats & Sauces", 2000, 1100, 0, 0, 0),
     ("Kedjenou de poulet", "Plats & Sauces", 3000, 1700, 0, 0, 0),
-    ("Attiéké", "Accompagnements", 500, 200, 0, 0, 0),
-    ("Alloco", "Accompagnements", 1000, 400, 0, 0, 0),
-    ("Frites", "Accompagnements", 1000, 450, 0, 0, 0),
-    ("Bière Flag 66cl", "Bières", 1500, 900, 1, 96, 24),
-    ("Bière Bock 66cl", "Bières", 1500, 900, 1, 72, 24),
-    ("Bière Guinness 33cl", "Bières", 1500, 1000, 1, 48, 12),
-    ("Bière Despé 33cl", "Bières", 2000, 1300, 1, 18, 12),
-    ("Coca-Cola 50cl", "Sucreries", 700, 400, 1, 120, 24),
-    ("Fanta Orange 50cl", "Sucreries", 700, 400, 1, 84, 24),
-    ("Sprite 50cl", "Sucreries", 700, 400, 1, 8, 24),
-    ("Eau minérale 1,5L", "Eaux & Jus", 500, 250, 1, 150, 30),
-    ("Jus de bissap 1L", "Eaux & Jus", 1500, 700, 1, 0, 6),
-    ("Jus de gingembre 1L", "Eaux & Jus", 1500, 700, 1, 14, 6),
+    
 ]
 
 TABLES = [
@@ -55,20 +43,12 @@ TABLES = [
     ("3", "Salle", 6),
     ("4", "Salle", 2),
     ("5", "Terrasse", 6),
-    ("6", "Terrasse", 6),
-    ("7", "Terrasse", 4),
-    ("8", "Terrasse", 8),
-    ("9", "Bar", 2),
-    ("10", "Bar", 2),
-    ("11", "VIP", 8),
-    ("12", "VIP", 10),
+ 
 ]
 
 DEPENSES = [
     ("Achat casiers de bière", "Approvisionnement", 180000, "Brassivoire"),
     ("Achat poulets & poissons", "Approvisionnement", 95000, "Marché de Cocody"),
-    ("Charbon de bois", "Approvisionnement", 15000, "Fournisseur local"),
-    ("Salaire serveurs (quinzaine)", "Salaire", 120000, None),
     ("Loyer du mois", "Loyer", 150000, "Propriétaire"),
     ("Facture CIE", "Électricité & Eau", 48000, "CIE"),
     ("Facture SODECI", "Électricité & Eau", 22000, "SODECI"),
@@ -82,16 +62,12 @@ PRENOMS = [
     "M. Kouassi",
     "Mme Aya",
     "Patron Diallo",
-    "Tante Adjoua",
-    "Frère Ismaël",
-    "Sœur Mariam",
-    "M. Bamba",
+ 
 ]
 
 
 def base_deja_remplie():
     return valeur("SELECT COUNT(*) FROM utilisateurs") > 0
-
 
 def peupler():
     initialiser_base()
@@ -161,7 +137,6 @@ def peupler():
 
     print("Base de démonstration créée.")
     print("Connexion : admin@divixmaquis.ci / admin123")
-
 
 def _generer_historique(conn, articles, nb_jours=21):
     """Crée des commandes et encaissements réalistes sur les trois dernières semaines."""
@@ -270,7 +245,6 @@ def _generer_historique(conn, articles, nb_jours=21):
         conn.execute(
             "UPDATE tables_salle SET statut = 'Occupée' WHERE id = %s", (id_table,)
         )
-
 
 def _generer_mouvements(conn):
     """Rejoue les ventes de boissons pour reconstituer un journal de stock cohérent.
