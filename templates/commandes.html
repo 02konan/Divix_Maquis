@@ -134,14 +134,16 @@
 <div class="content-wrapper d-flex flex-column gap-3">
     <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
         <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Commandes</span></p>
-        <a class="ms-auto btn btn-sm btn-outline-secondary" href="/caisse">
+        {% if peut('caisse_add') %}
+        <a class="ms-auto btn btn-sm btn-outline-secondary" href="{{ url_for('caisse') }}?encaisser=1">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M20 7H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-2h-5c-1.1 0-2-.9-2-2v-3c0-1.1.9-2 2-2h5V9c0-1.1-.9-2-2-2"></path><path d="M17 13h5v3h-5z"></path>
             </svg>
             <span class="mx-1">Encaisser</span>
         </a>
+        {% endif %}
         {% if peut('commande_add') %}
-        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#commandeModal">
+        <button class="{% if not peut('caisse_add') %}ms-auto {% endif %}btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#commandeModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
             </svg>

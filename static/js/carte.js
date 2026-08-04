@@ -231,8 +231,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     afficherBarrePanier();
+    // Le panier constitué sur la carte n'a d'intérêt qu'une fois validé : la
+    // barre ouvre directement le formulaire de commande, sans arrêt sur la
+    // liste des tickets.
     document.getElementById('barre-panier')?.addEventListener('click', () => {
-        window.location.href = '/commande';
+        window.location.href = '/commande?nouvelle=1';
     });
 
     chargerMenu();

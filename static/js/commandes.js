@@ -349,7 +349,7 @@ function reprendrePanierDeLaCarte() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    chargerCatalogue();
+    const cataloguePret = chargerCatalogue();
     chargerCommandes();
     brancherRecherche();
     afficherPanier();
@@ -373,10 +373,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     reprendrePanierDeLaCarte();
 
-    // Arrivée depuis le bouton « Commander » de la caisse : on ouvre la saisie.
-    if (new URLSearchParams(window.location.search).get('nouvelle') === '1') {
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('commandeModal')).show();
-    }
+    // Arrivée depuis le bouton « Commander » de la caisse ou depuis la barre de
+    // panier d'une carte : on ouvre la saisie, catalogue chargé.
+    Divix.ouvrirDepuisUrl({
+        parametre: 'nouvelle',
+        idModal: 'commandeModal',
+        pret: cataloguePret
+    });
 
     Divix.brancherFormulaire({
         idBouton: 'submitCommandeBtn',

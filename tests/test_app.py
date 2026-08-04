@@ -1086,3 +1086,27 @@ def test_bouton_commander_sur_la_caisse(app_maquis):
     assert "?nouvelle=1" in caisse
     assert "Commander" in caisse
 
+
+def test_bouton_encaisser_sur_les_commandes(app_maquis):
+    """Symétrique de « Commander » : le raccourci ouvre le formulaire de caisse."""
+    commandes = (
+        _connecte_en(app_maquis, "Caissier").get("/commande").get_data(as_text=True)
+    )
+    assert "/caisse?encaisser=1" in commandes
+    assert "Encaisser" in commandes
+
+
+def test_raccourci_encaisser_masque_pour_le_serveur(app_maquis):
+    """Un serveur n'encaisse pas : le raccourci ne doit pas le mener sur un 403."""
+    commandes = (
+        _connecte_en(app_maquis, "Serveur bar").get("/commande").get_data(as_text=True)
+    )
+    assert "encaisser=1" not in commandes
+    assert _connecte_en(app_maquis, "Serveur bar").get("/caisse").status_code == 302
+
+
+def test_la_barre_de_panier_ouvre_le_formulaire_de_commande(app_maquis):
+    """Le panier constitué sur une carte n'a d'intérêt qu'une fois validé."""
+    script = (RACINE / "static" / "js" / "carte.js").read_text(encoding="utf-8")
+    assert "'/commande?nouvelle=1'" in script
+

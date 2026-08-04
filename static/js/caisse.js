@@ -94,7 +94,15 @@ function surSelectionCommande() {
 
 document.addEventListener('DOMContentLoaded', () => {
     chargerCaisse();
-    chargerEncaissables();
+    const encaissablesPretes = chargerEncaissables();
+
+    // Arrivée depuis le bouton « Encaisser » des commandes : on ouvre la saisie
+    // une fois la liste des tickets remplie.
+    Divix.ouvrirDepuisUrl({
+        parametre: 'encaisser',
+        idModal: 'encaissementModal',
+        pret: encaissablesPretes
+    });
 
     document.getElementById('referenceCommande')
         ?.addEventListener('change', surSelectionCommande);

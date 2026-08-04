@@ -351,6 +351,37 @@ const Divix = {
                 rendre();
             }
         };
+    },
+
+    /* ------------------------------------------------------------------ */
+    /* Ouverture d'une modale à l'arrivée sur la page                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Ouvre une modale quand la page est appelée avec un paramètre d'URL.
+     * C'est ce qui fait qu'un bouton posé sur une page en déclenche le
+     * formulaire sur une autre : « Commander » depuis la caisse, « Encaisser »
+     * depuis les commandes, la barre de panier depuis une carte.
+     *
+     * `pret` sert à attendre les données que le formulaire affiche — sans lui,
+     * la modale s'ouvrirait sur une liste déroulante encore vide. Le paramètre
+     * est retiré de l'URL, sinon un rafraîchissement rouvrirait la modale.
+     */
+    async ouvrirDepuisUrl({ parametre, idModal, pret }) {
+        if (!new URLSearchParams(window.location.search).has(parametre)) return;
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete(parametre);
+        history.replaceState(null, '', url);
+
+        try {
+            await pret;
+        } catch (erreur) {
+            console.error(erreur);
+        }
+
+        const modale = document.getElementById(idModal);
+        if (modale) bootstrap.Modal.getOrCreateInstance(modale).show();
     }
 };
 

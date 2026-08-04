@@ -149,11 +149,26 @@ Chaque article se **modifie** depuis sa carte — le bouton *Modifier* rouvre le
 formulaire prérempli. Le stock n'y est volontairement pas modifiable : il ne bouge que
 par un mouvement enregistré dans la page Stock, pour que l'inventaire garde une trace.
 
-### Commander sans serveur connecté
+### Raccourcis entre les pages
 
-Certains établissements n'ont pas de serveur avec un compte : c'est le caissier qui
-prend la commande. La page **Caisse** porte donc un bouton *Commander* qui ouvre
-directement la prise de commande, sans passer par la page Commandes.
+Trois boutons traversent les pages et ouvrent directement le formulaire visé, sans
+étape intermédiaire :
+
+| Depuis | Bouton | Arrive sur |
+|--------|--------|------------|
+| Caisse | *Commander* | Commandes, formulaire de prise de commande ouvert |
+| Commandes | *Encaisser* | Caisse, formulaire d'encaissement ouvert |
+| Maquis / Menu | barre de panier | Commandes, formulaire ouvert avec le panier repris |
+
+Le premier existe parce que certains établissements n'ont pas de serveur avec un
+compte : c'est le caissier qui prend la commande. Le dernier ferme la boucle du
+parcours par QR code — on compose son panier sur la carte, on le valide d'un geste.
+
+Le paramètre d'URL qui déclenche l'ouverture est retiré une fois la modale affichée,
+donc un rafraîchissement ne la rouvre pas. L'ouverture attend les données du
+formulaire — catalogue d'articles, liste des tickets à encaisser — sinon la modale
+s'afficherait sur une liste déroulante vide. Le raccourci *Encaisser* n'apparaît que
+pour qui a le droit d'encaisser, comme tous les autres boutons d'action.
 
 ## Organisation du code
 
