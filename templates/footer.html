@@ -10,8 +10,8 @@
     {% if active_page == 'commande' %}
     <script src="{{ url_for('static', filename='js/commandes.js') }}" defer></script>
     {% endif %}
-    {% if active_page == 'menu' %}
-    <script src="{{ url_for('static', filename='js/menu.js') }}" defer></script>
+    {% if active_page in ('maquis', 'menu') %}
+    <script src="{{ url_for('static', filename='js/carte.js') }}" defer></script>
     {% endif %}
     {% if active_page == 'stock' %}
     <script src="{{ url_for('static', filename='js/stock.js') }}" defer></script>

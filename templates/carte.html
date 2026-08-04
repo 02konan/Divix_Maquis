@@ -1,6 +1,6 @@
 {% extends 'base-admin.html' %}
-{% block title %}Menu - Divix Maquis{% endblock %}
-{% block subtitle %}Menu{% endblock %}
+{% block title %}{{ 'Maquis' if page_carte == 'maquis' else 'Menu' }} - Divix Maquis{% endblock %}
+{% block subtitle %}{{ 'Maquis' if page_carte == 'maquis' else 'Menu' }}{% endblock %}
 {% block content %}
 <div class="modal fade" id="articleModal" tabindex="-1" aria-labelledby="articleModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-scrollable modal-lg">
@@ -13,12 +13,13 @@
         </div>
         <div>
             <h1 class="modal-title fs-5" id="articleModalLabel">Nouvel article</h1>
-            <span class="small text-muted">Plat, grillade ou boisson</span>
+            <span class="small text-muted">{{ 'Bière, sucrerie, eau ou jus' if page_carte == 'maquis' else 'Plat, grillade ou accompagnement' }}</span>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <form method="post" enctype="multipart/form-data" id="articleForm" class="vstack gap-2">
+            <input type="hidden" id="articleId" name="id_article">
             <fieldset>
                 <legend>Informations générales</legend>
                 <div class="col mb-3">
@@ -105,7 +106,7 @@
       <div class="modal-header">
         <div>
             <h1 class="modal-title fs-5">Nouvelle catégorie</h1>
-            <span class="small text-muted">Organiser la carte du maquis</span>
+            <span class="small text-muted">Organiser la carte {{ 'des boissons' if page_carte == 'maquis' else 'de la cuisine' }}</span>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
@@ -114,13 +115,6 @@
             <div class="col mb-3">
                 <label for="categorieNom" class="form-label">Nom <span class="small text-danger">*</span></label>
                 <input type="text" class="form-control" id="categorieNom" name="nom" placeholder="ex: Cocktails" required>
-            </div>
-            <div class="col mb-3">
-                <label for="categorieType" class="form-label">Type</label>
-                <select class="form-select" id="categorieType" name="type">
-                    <option value="Cuisine" selected>Cuisine</option>
-                    <option value="Bar">Bar</option>
-                </select>
             </div>
         </form>
       </div>
@@ -134,8 +128,8 @@
 
 <div class="content-wrapper d-flex flex-column gap-3">
     <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
-        <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Menu</span></p>
-        {% if peut_modifier %}
+        <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">{{ 'Maquis' if page_carte == 'maquis' else 'Menu' }}</span></p>
+        {% if peut(page_carte + '_add') %}
         <button class="ms-auto btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#categorieModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
@@ -211,7 +205,7 @@
                                 <path d="M16 16H2v2h14v4l6-5-6-5zM8 1 2 6l6 5V7h14V5H8z"></path>
                             </svg>
                         </div>
-                        <span class="small text-muted">Carte du maquis</span>
+                        <span class="small text-muted">{{ 'Carte des boissons' if page_carte == 'maquis' else 'Carte de la cuisine' }}</span>
                     </div>
                     <div class="ms-auto d-flex gap-2 filter-content">
                         <form action="" class="d-flex align-items-center rounded-pill" id="searchForm" onsubmit="return false;">
@@ -231,6 +225,7 @@
                 </div>
 
                 <div class="grille-menu mt-3" id="grille-menu"
+                     data-base="/{{ page_carte }}"
                      data-modifiable="{{ 1 if peut_modifier else 0 }}"
                      data-commandable="{{ 1 if peut_commander else 0 }}"></div>
                 <div class="pagination-liste" id="pagination-menu"></div>

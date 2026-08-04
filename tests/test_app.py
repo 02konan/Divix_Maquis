@@ -146,7 +146,7 @@ def test_creation_commande_decremente_le_stock(client_connecte):
     assert resultat["success"] is True
     assert resultat["montant_total"] == boisson["prix"] * 2
 
-    apres = client_connecte.get("/menu/list").get_json()["data"]
+    apres = client_connecte.get("/maquis/list").get_json()["data"]
     stock_apres = next(a["stock"] for a in apres if a["id"] == boisson["id"])
     assert stock_apres == stock_avant - 2
 
@@ -768,24 +768,31 @@ def _ouvrir_ticket(client, article, id_table="5"):
 
 
 @pytest.mark.parametrize(
-    "role, type_attendu",
-    [("Serveur bar", "Bar"), ("Serveur restaurant", "Cuisine")],
+    "role, page, type_attendu, page_interdite",
+    [
+        ("Serveur bar", "maquis", "Bar", "menu"),
+        ("Serveur restaurant", "menu", "Cuisine", "maquis"),
+    ],
 )
-def test_chaque_serveur_ne_voit_que_sa_carte(app_maquis, role, type_attendu):
+def test_chaque_serveur_ne_voit_que_sa_carte(
+    app_maquis, role, page, type_attendu, page_interdite
+):
     client = _connecte_en(app_maquis, role)
 
-    carte = client.get("/menu/list").get_json()
+    carte = client.get(f"/{page}/list").get_json()
     types = {article["type_categorie"] for article in carte["data"]}
     assert types == {type_attendu}
     assert carte["counter"]["total_articles"] == len(carte["data"])
 
+    # L'autre carte lui est fermée, page comme données.
+    assert client.get(f"/{page_interdite}").status_code == 302
+    assert client.get(f"/{page_interdite}/list").status_code == 403
+
+    # Le sélecteur de la prise de commande suit le même partage.
     proposables = client.get("/menu/disponibles").get_json()["data"]
     assert proposables
-    assert len(proposables) < 22
-
-    # Le gérant, lui, voit toute la carte.
-    complete = _connecte_en(app_maquis, "Gérant").get("/menu/list").get_json()["data"]
-    assert len(complete) > len(carte["data"])
+    categories_de_la_carte = {article["categorie"] for article in carte["data"]}
+    assert {article["categorie"] for article in proposables} <= categories_de_la_carte
 
 
 def test_commande_hors_domaine_refusee(app_maquis):
@@ -872,7 +879,7 @@ def test_le_gerant_cree_un_compte_utilisable(app_maquis):
     ).get_json()
     assert connexion["success"] is True
 
-    carte = nouveau.get("/menu/list").get_json()["data"]
+    carte = nouveau.get("/maquis/list").get_json()["data"]
     assert {article["type_categorie"] for article in carte} == {"Bar"}
 
 
@@ -1007,4 +1014,75 @@ def test_fichiers_embarques_presents():
         fichier = RACINE / "static" / chemin
         assert fichier.exists(), f"manquant : {chemin}"
         assert fichier.stat().st_size > 0
+
+
+def test_modification_d_un_article(app_maquis):
+    """Un article ajouté doit pouvoir être corrigé — prix, nom, seuil."""
+    gerant = _connecte_en(app_maquis, "Gérant")
+    article = gerant.get("/maquis/list").get_json()["data"][0]
+    categorie = next(
+        c["id"]
+        for c in __import__("backend.lectures", fromlist=["x"]).liste_categories(("Bar",))
+    )
+
+    modification = gerant.post(
+        f"/maquis/{article['id']}/modifier",
+        data={
+            "nom": "Nom corrigé",
+            "categorie": categorie,
+            "prix": "1750",
+            "cout_revient": "900",
+            "gere_stock": "1",
+            "seuil_alerte": "18",
+            "disponible": "1",
+        },
+    ).get_json()
+    assert modification["success"] is True
+
+    apres = next(
+        a for a in gerant.get("/maquis/list").get_json()["data"] if a["id"] == article["id"]
+    )
+    assert apres["nom"] == "Nom corrigé"
+    assert apres["prix"] == 1750
+    assert apres["seuil_alerte"] == 18
+    # La quantité en stock ne se corrige que par un mouvement d'inventaire.
+    assert apres["stock"] == article["stock"]
+
+
+def test_une_carte_ne_touche_pas_a_l_autre(app_maquis):
+    gerant = _connecte_en(app_maquis, "Gérant")
+    plat = gerant.get("/menu/list").get_json()["data"][0]
+
+    hors_carte = gerant.post(
+        f"/maquis/{plat['id']}/modifier",
+        data={"nom": "X", "categorie": "1", "prix": "100"},
+    )
+    assert hors_carte.status_code == 404
+
+    mauvaise_categorie = gerant.post(
+        "/maquis/add", data={"nom": "X", "categorie": "1", "prix": "100"}
+    )
+    assert mauvaise_categorie.status_code == 400
+    assert "pas sur cette carte" in mauvaise_categorie.get_json()["error"]
+
+
+def test_boutons_masques_pour_qui_ne_peut_pas_agir(app_maquis):
+    """Masquer ne suffit pas : l'action reste refusée si la requête est forgée."""
+    serveur = _connecte_en(app_maquis, "Serveur bar")
+    gerant = _connecte_en(app_maquis, "Gérant")
+
+    assert 'data-bs-target="#tableModal"' in gerant.get("/salle").get_data(as_text=True)
+    assert 'data-bs-target="#tableModal"' not in serveur.get("/salle").get_data(as_text=True)
+    assert serveur.post("/salle/add", data={"numero": "99"}).status_code == 403
+
+    carte = serveur.get("/maquis").get_data(as_text=True)
+    assert 'data-bs-target="#articleModal"' not in carte
+    assert 'data-bs-target="#categorieModal"' not in carte
+
+
+def test_bouton_commander_sur_la_caisse(app_maquis):
+    """Sans serveurs connectés, le caissier prend la commande lui-même."""
+    caisse = _connecte_en(app_maquis, "Caissier").get("/caisse").get_data(as_text=True)
+    assert "?nouvelle=1" in caisse
+    assert "Commander" in caisse
 

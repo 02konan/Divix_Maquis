@@ -185,7 +185,8 @@ const Divix = {
      * Branche un bouton de soumission sur un endpoint.
      * `avantEnvoi` peut renvoyer false pour annuler, ou un FormData personnalisé.
      */
-    brancherFormulaire({ idBouton, idFormulaire, url, idModal, apres, avantEnvoi }) {
+    /* `urlDynamique` permet à un même formulaire de créer ou de modifier. */
+    brancherFormulaire({ idBouton, idFormulaire, url, urlDynamique, idModal, apres, avantEnvoi }) {
         const bouton = document.getElementById(idBouton);
         const formulaire = document.getElementById(idFormulaire);
         if (!bouton || !formulaire) return;
@@ -205,7 +206,7 @@ const Divix = {
             bouton.innerHTML = '<i class="bx bx-loader-lines bx-spin me-2"></i>Enregistrement...';
 
             try {
-                const reponse = await Divix.envoyer(url, donnees);
+                const reponse = await Divix.envoyer(urlDynamique ? urlDynamique() : url, donnees);
                 if (reponse.success) {
                     await Divix.succes(reponse.message || 'Opération réussie');
                     const modal = idModal && bootstrap.Modal.getInstance(document.getElementById(idModal));

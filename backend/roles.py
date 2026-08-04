@@ -10,6 +10,7 @@ PAGES = [
     {"cle": "dashboard", "url": "/", "libelle": "Dashboard", "icone": "bxf bx-layers"},
     {"cle": "salle", "url": "/salle", "libelle": "Salle", "icone": "bxf bx-grid"},
     {"cle": "commande", "url": "/commande", "libelle": "Commandes", "icone": "bxf bx-receipt"},
+    {"cle": "maquis", "url": "/maquis", "libelle": "Maquis", "icone": "bxf bx-beer"},
     {"cle": "menu", "url": "/menu", "libelle": "Menu", "icone": "bxf bx-fork-knife"},
     {"cle": "stock", "url": "/stock", "libelle": "Stock", "icone": "bxf bx-package"},
     {"cle": "caisse", "url": "/caisse", "libelle": "Caisse", "icone": "bx bx-currency-notes"},
@@ -23,9 +24,16 @@ PAGES_PAR_ROLE = {
     # Seul le gérant administre les fonctionnalités et les comptes.
     "Gérant": TOUTES_LES_PAGES,
     "Caissier": {"salle", "commande", "caisse"},
-    "Serveur": {"salle", "commande", "menu"},
-    "Serveur bar": {"salle", "commande", "menu"},
+    "Serveur": {"salle", "commande", "maquis", "menu"},
+    "Serveur bar": {"salle", "commande", "maquis"},
     "Serveur restaurant": {"salle", "commande", "menu"},
+}
+
+# La carte est coupée en deux pages : le maquis sert la boisson, le menu la
+# nourriture. Le partage suit le type des catégories, déjà porté par la base.
+DOMAINE_PAR_PAGE = {
+    "maquis": ("Bar",),
+    "menu": ("Cuisine",),
 }
 
 # Le maquis et le restaurant ont des serveurs distincts : les uns servent la
@@ -40,8 +48,8 @@ DOMAINES_PAR_ROLE = {
 # Pages consultables sans pouvoir y écrire : le serveur voit la carte et les
 # prix, mais ne crée ni article ni catégorie.
 LECTURE_SEULE_PAR_ROLE = {
-    "Serveur": {"menu"},
-    "Serveur bar": {"menu"},
+    "Serveur": {"maquis", "menu"},
+    "Serveur bar": {"maquis"},
     "Serveur restaurant": {"menu"},
 }
 
@@ -61,9 +69,16 @@ PAGE_PAR_ENDPOINT = {
     "commande_detail": "commande",
     "commande_statut": "commande",
     "menu_disponibles": "commande",
+    "maquis": "maquis",
+    "maquis_list": "maquis",
+    "maquis_add": "maquis",
+    "maquis_modifier": "maquis",
+    "maquis_disponibilite": "maquis",
+    "maquis_categorie_add": "maquis",
     "menu": "menu",
     "menu_list": "menu",
     "menu_add": "menu",
+    "menu_modifier": "menu",
     "menu_disponibilite": "menu",
     "menu_categorie_add": "menu",
     "stock": "stock",
@@ -83,6 +98,11 @@ PAGE_PAR_ENDPOINT = {
     "administration_utilisateur_role": "administration",
     "administration_utilisateur_motdepasse": "administration",
 }
+
+# Écritures qui relèvent de la gestion de l'établissement, pas du service :
+# un serveur n'a pas à créer des tables.
+ENDPOINTS_GESTION = {"salle_add"}
+ROLES_GESTION = {"Gérant"}
 
 ENDPOINTS_PUBLICS = {"login", "static"}
 ENDPOINTS_TOUJOURS_AUTORISES = {"logout"}
@@ -113,6 +133,11 @@ def domaines(role):
     return DOMAINES_PAR_ROLE.get(role)
 
 
+def domaine_page(page):
+    """Types de catégories présentés par une page de carte."""
+    return DOMAINE_PAR_PAGE.get(page)
+
+
 def pages_autorisees(role):
     """Un rôle inconnu n'a accès à rien : mieux vaut fermer que d'ouvrir par défaut."""
     return PAGES_PAR_ROLE.get(role, set())
@@ -131,6 +156,8 @@ def page_accueil(role):
 def acces_autorise(role, endpoint, methode="GET"):
     if endpoint in ENDPOINTS_TOUJOURS_AUTORISES:
         return True
+    if endpoint in ENDPOINTS_GESTION and role not in ROLES_GESTION:
+        return False
 
     page = PAGE_PAR_ENDPOINT.get(endpoint)
     if page is None or page not in pages_autorisees(role):

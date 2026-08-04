@@ -75,12 +75,14 @@
 <div class="content-wrapper d-flex flex-column gap-3">
     <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
         <p class="m-0"><span class="text-muted">Dashboard / </span><span class="fw-medium">Dépenses</span></p>
+        {% if peut('depense_add') %}
         <button class="ms-auto btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#depenseModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
             </svg>
             <span class="mx-1">Dépense</span>
         </button>
+        {% endif %}
     </div>
 
     <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">

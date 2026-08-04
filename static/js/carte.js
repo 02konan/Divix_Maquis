@@ -1,10 +1,12 @@
-/* Carte du maquis : présentation en cartes-plats, disponibilité et création. */
+/* Carte en cartes-plats : partagée par les pages Maquis (boissons) et Menu
+   (nourriture). L'URL de base vient du gabarit, tout le reste en découle. */
 
 let articlesMenu = [];
 let categorieActive = '';
 let modifiable = false;
 let commandable = false;
 let paginationMenu = null;
+let base = '/menu';
 
 /* Panier constitué depuis la carte, repris tel quel par la page Commandes. */
 const CLE_PANIER = 'divix.panier';
@@ -32,7 +34,7 @@ async function chargerMenu() {
     grille().innerHTML = '<div class="squelette-plat"></div>'.repeat(8);
 
     try {
-        const reponse = await Divix.charger('/menu/list');
+        const reponse = await Divix.charger(`${base}/list`);
         articlesMenu = reponse.data || [];
         Divix.compteurs(reponse.counter);
         afficherMenu();
@@ -62,10 +64,13 @@ function carteArticle(article) {
     // Le gérant gère la carte : « Retirer / Remettre ». Les autres commandent.
     let action = '';
     if (modifiable) {
-        action = `<button class="btn btn-sm ms-auto ${article.disponible ? 'btn-action-annuler' : 'btn-action-servir'}"
-                          onclick="basculerDisponibilite(${article.id}, ${article.disponible ? 0 : 1})">
-                      ${article.disponible ? 'Retirer' : 'Remettre'}
-                  </button>`;
+        action = `<span class="ms-auto d-flex gap-1">
+                      <button class="btn btn-sm btn-action-voir" onclick="ouvrirModification(${article.id})">Modifier</button>
+                      <button class="btn btn-sm ${article.disponible ? 'btn-action-annuler' : 'btn-action-servir'}"
+                              onclick="basculerDisponibilite(${article.id}, ${article.disponible ? 0 : 1})">
+                          ${article.disponible ? 'Retirer' : 'Remettre'}
+                      </button>
+                  </span>`;
     } else if (commandable && !indisponible) {
         action = `<button class="btn btn-sm ms-auto btn-action-servir"
                           onclick="ajouterAuPanier(${article.id})">Ajouter</button>`;
@@ -164,9 +169,43 @@ function filtrerCartes() {
     }
 }
 
+/* Le formulaire d'article sert à créer comme à modifier : un identifiant
+   présent bascule l'envoi vers la route de modification. */
+function ouvrirModification(idArticle) {
+    const article = articlesMenu.find((element) => element.id === idArticle);
+    if (!article) return;
+
+    document.getElementById('articleId').value = article.id;
+    document.getElementById('articleNom').value = article.nom;
+    document.getElementById('articlePrix').value = article.prix;
+    document.getElementById('articleCout').value = article.cout_revient || '';
+    document.getElementById('articleSeuil').value = article.seuil_alerte || 0;
+    document.getElementById('articleGereStock').value = article.gere_stock ? '1' : '0';
+    document.getElementById('articleDisponible').value = article.disponible ? '1' : '0';
+
+    const categorie = document.getElementById('articleCategorie');
+    [...categorie.options].forEach((option) => {
+        option.selected = option.textContent.trim() === article.categorie;
+    });
+
+    // La quantité en stock se corrige par un inventaire, pas ici.
+    document.getElementById('articleStock').closest('.col').style.display = 'none';
+    document.getElementById('blocStock').style.display = article.gere_stock ? '' : 'none';
+    document.getElementById('articleModalLabel').textContent = 'Modifier l\'article';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('articleModal')).show();
+}
+
+function reinitialiserFormulaireArticle() {
+    document.getElementById('articleForm').reset();
+    document.getElementById('articleId').value = '';
+    document.getElementById('articleStock').closest('.col').style.display = '';
+    document.getElementById('blocStock').style.display = 'none';
+    document.getElementById('articleModalLabel').textContent = 'Nouvel article';
+}
+
 async function basculerDisponibilite(idArticle, disponible) {
     try {
-        const reponse = await Divix.envoyer(`/menu/${idArticle}/disponibilite`, { disponible });
+        const reponse = await Divix.envoyer(`${base}/${idArticle}/disponibilite`, { disponible });
         if (reponse.success) {
             chargerMenu();
         } else {
@@ -179,6 +218,7 @@ async function basculerDisponibilite(idArticle, disponible) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    base = grille()?.dataset.base || '/menu';
     modifiable = grille()?.dataset.modifiable === '1';
     commandable = grille()?.dataset.commandable === '1';
 
@@ -219,18 +259,28 @@ document.addEventListener('DOMContentLoaded', () => {
     Divix.brancherFormulaire({
         idBouton: 'submitArticleBtn',
         idFormulaire: 'articleForm',
-        url: '/menu/add',
+        url: `${base}/add`,
         idModal: 'articleModal',
+        urlDynamique: () => {
+            const id = document.getElementById('articleId').value;
+            return id ? `${base}/${id}/modifier` : `${base}/add`;
+        },
         apres: () => {
-            blocStock.style.display = 'none';
+            reinitialiserFormulaireArticle();
             chargerMenu();
         }
     });
 
+    // Rouvrir la modale après une modification ne doit pas garder l'ancien article.
+    document.getElementById('articleModal')
+        ?.addEventListener('hidden.bs.modal', reinitialiserFormulaireArticle);
+    document.querySelector('[data-bs-target="#articleModal"]')
+        ?.addEventListener('click', reinitialiserFormulaireArticle);
+
     Divix.brancherFormulaire({
         idBouton: 'submitCategorieBtn',
         idFormulaire: 'categorieForm',
-        url: '/menu/categorie/add',
+        url: `${base}/categorie/add`,
         idModal: 'categorieModal',
         apres: () => window.location.reload()
     });

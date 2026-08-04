@@ -373,6 +373,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     reprendrePanierDeLaCarte();
 
+    // Arrivée depuis le bouton « Commander » de la caisse : on ouvre la saisie.
+    if (new URLSearchParams(window.location.search).get('nouvelle') === '1') {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('commandeModal')).show();
+    }
+
     Divix.brancherFormulaire({
         idBouton: 'submitCommandeBtn',
         idFormulaire: 'commandeForm',

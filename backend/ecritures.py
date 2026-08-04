@@ -106,6 +106,52 @@ def creer_article(
         return {"success": False, "error": message_erreur(erreur)}
 
 
+def modifier_article(
+    id_article,
+    nom,
+    id_categorie,
+    prix,
+    cout_revient,
+    gere_stock,
+    seuil_alerte,
+    disponible,
+    image,
+):
+    """Met à jour un article. La quantité en stock n'est pas touchée ici :
+    elle se corrige par un mouvement d'inventaire, qui laisse une trace."""
+    try:
+        champs = [
+            "nom = %s",
+            "id_categorie = %s",
+            "prix = %s",
+            "cout_revient = %s",
+            "gere_stock = %s",
+            "seuil_alerte = %s",
+            "disponible = %s",
+        ]
+        valeurs = [
+            nom,
+            id_categorie,
+            float(prix),
+            float(cout_revient or 0),
+            int(gere_stock),
+            int(seuil_alerte or 0),
+            int(disponible),
+        ]
+        # Une photo absente du formulaire signifie « garder l'actuelle ».
+        if image:
+            champs.append("image = %s")
+            valeurs.append(image)
+
+        executer(
+            f"UPDATE articles SET {', '.join(champs)} WHERE id = %s",
+            (*valeurs, int(id_article)),
+        )
+        return {"success": True, "id_article": int(id_article)}
+    except Exception as erreur:
+        return {"success": False, "error": message_erreur(erreur)}
+
+
 def basculer_disponibilite(id_article, disponible):
     try:
         executer(

@@ -114,6 +114,28 @@ def compteurs_menu(domaines=None):
     )
 
 
+def article_par_id(id_article, domaines=None):
+    condition, params = _restriction(domaines)
+    return lire_un(
+        f"""
+        SELECT a.*, COALESCE(c.type, 'Cuisine') AS type_categorie
+        FROM articles a
+        LEFT JOIN categories c ON a.id_categorie = c.id
+        WHERE a.id = %s{condition}
+        """,
+        (id_article, *params),
+    )
+
+
+def categorie_du_domaine(id_categorie, domaines=None):
+    """Vérifie qu'une catégorie appartient bien au domaine de la page."""
+    condition, params = _restriction(domaines, alias="categories")
+    return lire_un(
+        f"SELECT id FROM categories WHERE id = %s{condition}",
+        (id_categorie, *params),
+    )
+
+
 def statut_stock(article):
     """Libellé de stock affiché dans les tableaux."""
     if not article["gere_stock"]:

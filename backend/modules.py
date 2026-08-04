@@ -36,9 +36,17 @@ MODULES = [
         "defaut": True,
     },
     {
+        "cle": "maquis",
+        "libelle": "Maquis",
+        "description": "Carte des boissons : bières, sucreries, eaux et jus. "
+        "À désactiver pour un restaurant sans bar.",
+        "obligatoire": False,
+        "defaut": True,
+    },
+    {
         "cle": "menu",
-        "libelle": "Carte",
-        "description": "Articles, prix et catégories.",
+        "libelle": "Menu du restaurant",
+        "description": "Carte de la nourriture : grillades, plats, accompagnements.",
         "obligatoire": True,
         "defaut": True,
     },

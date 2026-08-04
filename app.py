@@ -86,15 +86,28 @@ def restreindre_acces():
 
 @app.context_processor
 def injecter_contexte():
-    """Le menu ne montre que les pages autorisées ET activées."""
+    """Menu, fonctionnalités actives et droits, pour tous les gabarits."""
+    role = session.get("user_role")
     actifs = modules.actifs()
+
+    def peut(endpoint, methode="POST"):
+        """Le rôle peut-il déclencher cette action ? Sert à masquer les boutons.
+
+        S'appuie sur le même contrôle que le serveur : un bouton visible mène
+        toujours à une action permise, et un bouton masqué reste refusé si
+        quelqu'un forge la requête.
+        """
+        page = roles.PAGE_PAR_ENDPOINT.get(endpoint)
+        return roles.acces_autorise(role, endpoint, methode) and modules.actif(page)
+
     return {
         "nav_items": [
             page
-            for page in roles.menu(session.get("user_role"))
+            for page in roles.menu(role)
             if page["cle"] not in modules.CLES or page["cle"] in actifs
         ],
         "modules_actifs": actifs,
+        "peut": peut,
     }
 
 
@@ -294,44 +307,39 @@ def salle_statut(id_table):
     return jsonify(resultat), 200 if resultat["success"] else 400
 
 
-# ==================================== MENU ====================================
+# ========================== CARTES : MAQUIS ET MENU ==========================
+#
+# Deux pages sur le même gabarit : le maquis sert la boisson, le menu la
+# nourriture. Le domaine vient de la page, pas du rôle — un gérant voit les deux
+# pages, un serveur du bar la sienne seulement.
 
 
-@app.route("/menu")
-def menu():
+def _carte(page):
+    domaines = roles.domaine_page(page)
+    role = session.get("user_role")
     return render_template(
-        "menu.html",
-        active_page="menu",
-        categories=lectures.liste_categories(domaines_courants()),
-        # Le serveur consulte la carte sans la modifier : inutile de lui montrer
-        # des boutons qui répondraient 403. En revanche il commande, donc c'est
-        # « Ajouter » qui s'affiche sur les plats — comme le verront les clients
-        # arrivant par QR code.
-        peut_modifier=roles.acces_autorise(
-            session.get("user_role"), "menu_add", "POST"
-        ),
-        peut_commander=roles.acces_autorise(
-            session.get("user_role"), "commande_add", "POST"
-        ),
+        "carte.html",
+        active_page=page,
+        page_carte=page,
+        type_carte=domaines[0],
+        categories=lectures.liste_categories(domaines),
+        # Un serveur consulte sans modifier : inutile de lui montrer des boutons
+        # qui répondraient 403. En revanche il commande, donc c'est « Ajouter »
+        # qui s'affiche sur les articles.
+        peut_modifier=roles.acces_autorise(role, f"{page}_add", "POST"),
+        peut_commander=roles.acces_autorise(role, "commande_add", "POST"),
     )
 
 
-@app.route("/menu/list")
-def menu_list():
-    domaines = domaines_courants()
+def _carte_list(page):
+    domaines = roles.domaine_page(page)
     articles = lectures.liste_articles(domaines)
     for article in articles:
         article["statut"] = lectures.statut_stock(article)
     return jsonify({"data": articles, "counter": lectures.compteurs_menu(domaines)})
 
 
-@app.route("/menu/disponibles")
-def menu_disponibles():
-    return jsonify({"data": lectures.articles_disponibles(domaines_courants())})
-
-
-@app.route("/menu/add", methods=["POST"])
-def menu_add():
+def _carte_add(page):
     nom = request.form.get("nom")
     id_categorie = request.form.get("categorie")
     prix = request.form.get("prix")
@@ -341,8 +349,13 @@ def menu_add():
             {"success": False, "error": "Nom, catégorie et prix sont obligatoires"}
         ), 400
 
-    gere_stock = 1 if request.form.get("gere_stock") == "1" else 0
+    domaines = roles.domaine_page(page)
+    if not lectures.categorie_du_domaine(id_categorie, domaines):
+        return jsonify(
+            {"success": False, "error": "Cette catégorie n'est pas sur cette carte"}
+        ), 400
 
+    gere_stock = 1 if request.form.get("gere_stock") == "1" else 0
     resultat = ecritures.creer_article(
         nom=nom,
         id_categorie=id_categorie,
@@ -358,23 +371,129 @@ def menu_add():
 
     if not resultat["success"]:
         return jsonify(resultat), 400
-    return jsonify({**resultat, "message": "Article ajouté au menu"})
+    return jsonify({**resultat, "message": "Article ajouté"})
 
 
-@app.route("/menu/<int:id_article>/disponibilite", methods=["POST"])
-def menu_disponibilite(id_article):
+def _carte_modifier(page, id_article):
+    domaines = roles.domaine_page(page)
+    if not lectures.article_par_id(id_article, domaines):
+        return jsonify(
+            {"success": False, "error": "Cet article n'est pas sur cette carte"}
+        ), 404
+
+    nom = request.form.get("nom")
+    id_categorie = request.form.get("categorie")
+    prix = request.form.get("prix")
+    if not nom or not id_categorie or not prix:
+        return jsonify(
+            {"success": False, "error": "Nom, catégorie et prix sont obligatoires"}
+        ), 400
+    if not lectures.categorie_du_domaine(id_categorie, domaines):
+        return jsonify(
+            {"success": False, "error": "Cette catégorie n'est pas sur cette carte"}
+        ), 400
+
+    gere_stock = 1 if request.form.get("gere_stock") == "1" else 0
+    resultat = ecritures.modifier_article(
+        id_article=id_article,
+        nom=nom,
+        id_categorie=id_categorie,
+        prix=nombre(prix),
+        cout_revient=nombre(request.form.get("cout_revient")),
+        gere_stock=gere_stock,
+        seuil_alerte=int(nombre(request.form.get("seuil_alerte"))) if gere_stock else 0,
+        disponible=1 if request.form.get("disponible", "1") == "1" else 0,
+        image=enregistrer_image(),
+    )
+
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+    return jsonify({**resultat, "message": "Article modifié"})
+
+
+def _carte_disponibilite(page, id_article):
+    if not lectures.article_par_id(id_article, roles.domaine_page(page)):
+        return jsonify(
+            {"success": False, "error": "Cet article n'est pas sur cette carte"}
+        ), 404
     disponible = request.form.get("disponible") == "1"
     return jsonify(ecritures.basculer_disponibilite(id_article, disponible))
 
 
-@app.route("/menu/categorie/add", methods=["POST"])
-def menu_categorie_add():
+def _carte_categorie_add(page):
     nom = request.form.get("nom")
     if not nom:
         return jsonify({"success": False, "error": "Nom de catégorie obligatoire"}), 400
 
-    resultat = ecritures.creer_categorie(nom, request.form.get("type") or "Cuisine")
+    # Le type ne se choisit pas : il découle de la page où l'on se trouve.
+    resultat = ecritures.creer_categorie(nom, roles.domaine_page(page)[0])
     return jsonify(resultat), 200 if resultat["success"] else 400
+
+
+@app.route("/maquis")
+def maquis():
+    return _carte("maquis")
+
+
+@app.route("/maquis/list")
+def maquis_list():
+    return _carte_list("maquis")
+
+
+@app.route("/maquis/add", methods=["POST"])
+def maquis_add():
+    return _carte_add("maquis")
+
+
+@app.route("/maquis/<int:id_article>/modifier", methods=["POST"])
+def maquis_modifier(id_article):
+    return _carte_modifier("maquis", id_article)
+
+
+@app.route("/maquis/<int:id_article>/disponibilite", methods=["POST"])
+def maquis_disponibilite(id_article):
+    return _carte_disponibilite("maquis", id_article)
+
+
+@app.route("/maquis/categorie/add", methods=["POST"])
+def maquis_categorie_add():
+    return _carte_categorie_add("maquis")
+
+
+@app.route("/menu")
+def menu():
+    return _carte("menu")
+
+
+@app.route("/menu/list")
+def menu_list():
+    return _carte_list("menu")
+
+
+@app.route("/menu/add", methods=["POST"])
+def menu_add():
+    return _carte_add("menu")
+
+
+@app.route("/menu/<int:id_article>/modifier", methods=["POST"])
+def menu_modifier(id_article):
+    return _carte_modifier("menu", id_article)
+
+
+@app.route("/menu/<int:id_article>/disponibilite", methods=["POST"])
+def menu_disponibilite(id_article):
+    return _carte_disponibilite("menu", id_article)
+
+
+@app.route("/menu/categorie/add", methods=["POST"])
+def menu_categorie_add():
+    return _carte_categorie_add("menu")
+
+
+@app.route("/menu/disponibles")
+def menu_disponibles():
+    """Sélecteur d'articles de la prise de commande : filtré par le rôle."""
+    return jsonify({"data": lectures.articles_disponibles(domaines_courants())})
 
 
 # =================================== STOCK ===================================

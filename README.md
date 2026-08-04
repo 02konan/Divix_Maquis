@@ -58,8 +58,11 @@ désactive chaque fonctionnalité :
 
 | Fonctionnalité | Désactivable |
 |----------------|--------------|
-| Tableau de bord, Gestion de salle, Stock, Dépenses | oui |
-| Commandes, Carte, Caisse | non — cœur du logiciel |
+| Tableau de bord, Gestion de salle, Maquis, Stock, Dépenses | oui |
+| Commandes, Menu, Caisse | non — cœur du logiciel |
+
+La page **Maquis** est désactivable parce qu'un restaurant qui ne sert pas de boisson
+n'en a pas l'usage ; la carte du restaurant, elle, reste toujours là.
 
 Une fonctionnalité désactivée disparaît du menu **et** ses URL sont fermées (`403`
 sur les appels de données), pour tout le monde, gérant compris. Les données déjà
@@ -76,14 +79,19 @@ donc un basculement peut mettre ce délai à se propager aux autres workers guni
 
 ## Droits par rôle
 
-| | Dashboard | Salle | Commandes | Menu | Stock | Caisse | Dépenses |
-|---|---|---|---|---|---|---|---|
-| **Gérant**   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| | *(et la page Administration)* | | | | | | |
-| **Caissier** | — | ✓ | ✓ | — | — | ✓ | — |
-| **Serveur**  | — | ✓ | ✓ | lecture | — | — | — |
-| **Serveur bar** | — | ✓ | ✓ | lecture | — | — | — |
-| **Serveur restaurant** | — | ✓ | ✓ | lecture | — | — | — |
+| | Dashboard | Salle | Commandes | Maquis | Menu | Stock | Caisse | Dépenses |
+|---|---|---|---|---|---|---|---|---|
+| **Gérant**   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | *(et la page Administration)* | | | | | | | |
+| **Caissier** | — | ✓ | ✓ | — | — | — | ✓ | — |
+| **Serveur**  | — | ✓ | ✓ | lecture | lecture | — | — | — |
+| **Serveur bar** | — | ✓ | ✓ | lecture | — | — | — | — |
+| **Serveur restaurant** | — | ✓ | ✓ | — | lecture | — | — | — |
+
+« lecture » veut dire la page sans ses boutons d'action : un serveur consulte la carte
+et met les articles au panier, mais ne crée, ne modifie ni ne retire rien. Le masquage
+est décidé par le même tableau de droits que le serveur applique, donc un bouton absent
+correspond toujours à une URL fermée — pas l'inverse.
 
 ### Bar et restaurant
 
@@ -122,10 +130,30 @@ connexion sur sa première page autorisée. Un rôle absent du tableau n'a accè
 | **Dashboard** | Recette du jour, commandes, ticket moyen, tables occupées, courbe des 7 derniers jours, top ventes |
 | **Salle**     | Plan de salle par zone (Salle, Terrasse, Bar, VIP), état des tables, ticket en cours |
 | **Commandes** | Prise de commande (recherche d'articles, panier, remise), suivi des tickets, détail et ticket imprimable |
-| **Menu**      | Carte du maquis : plats, grillades et boissons, prix, marge, disponibilité |
+| **Maquis**    | Carte du bar : boissons, prix, marge, disponibilité |
+| **Menu**      | Carte du restaurant : plats et grillades, prix, marge, disponibilité |
 | **Stock**     | Stock des boissons, seuils d'alerte, entrées/sorties/pertes/inventaires |
 | **Caisse**    | Encaissements totaux ou partiels, répartition par mode de paiement, journal de caisse |
 | **Dépenses**  | Approvisionnements, salaires, loyer, charges |
+
+### Les deux cartes
+
+**Maquis** et **Menu** sont la même page servie sur deux périmètres : la première ne
+montre que les catégories de type `Bar`, la seconde celles de type `Cuisine`. Le type
+n'est plus demandé au moment de créer une catégorie, il découle de la page où l'on se
+trouve. Le cloisonnement est vérifié côté serveur à chaque écriture : modifier depuis
+`/maquis` un article du restaurant répond `404`, et rattacher un article à une catégorie
+de l'autre carte est refusé.
+
+Chaque article se **modifie** depuis sa carte — le bouton *Modifier* rouvre le
+formulaire prérempli. Le stock n'y est volontairement pas modifiable : il ne bouge que
+par un mouvement enregistré dans la page Stock, pour que l'inventaire garde une trace.
+
+### Commander sans serveur connecté
+
+Certains établissements n'ont pas de serveur avec un compte : c'est le caissier qui
+prend la commande. La page **Caisse** porte donc un bouton *Commander* qui ouvre
+directement la prise de commande, sans passer par la page Commandes.
 
 ## Organisation du code
 
@@ -141,8 +169,11 @@ divix_maquis/
 │   └── ecritures.py        toutes les écritures (commandes, caisse, stock, dépenses)
 ├── donnees_demo.py         initialisation + jeu de démonstration
 ├── templates/              interface reprise de Divix SysPaie
+│   └── carte.html          servie par /maquis et par /menu
 ├── static/css/             admin.css, login.css, table-mobile.css (identiques) + maquis.css
-└── static/js/              commun.js (helpers partagés) + un script par page
+├── static/js/              commun.js (helpers partagés) + un script par page
+│   └── carte.js            pilote les deux cartes (base d'URL lue dans le HTML)
+└── static/vendor/          Bootstrap, SweetAlert2, Chart.js, Outfit, Boxicons
 ```
 
 Deux règles structurent le backend :
