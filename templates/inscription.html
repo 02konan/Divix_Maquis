@@ -12,7 +12,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/login.css')}}" />
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/maquis.css')}}" />
     <script src="{{ url_for('static', filename='vendor/sweetalert2/sweetalert2.all.min.js') }}"></script>
-    <title>Connexion - Divix Maquis</title>
+    <title>Ouvrir mon établissement - Divix Maquis</title>
 </head>
 <body class="login-body">
     <div class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true" id="loginToast" style="position: absolute; top: 20px; left: 20px; z-index: 99;">
@@ -27,36 +27,52 @@
                 <span class="m-0 login-subtilte">Maquis</span>
                 <div id="logo" class="d-flex border-0 ms-auto">
                     <img src="/static/icons/logo.svg" alt="Logo">
-                    
                 </div>
             </div>
         </div>
         <div class="col-6 d-flex flex-column align-items-center justify-content-center f-login">
             <div class="align-items-center header-mobile">
-                <span class="m-0 text-muted">Se connecter</span>
+                <span class="m-0 text-muted">Ouvrir mon établissement</span>
             </div>
-            <img src="/static/icons/icon-512.png" alt="Logo Divix Maquis" class="img-fluid mb-3" style="max-width: 220px; height: auto;">
-            <p class="text-center text-muted mb-4">Connectez-vous pour ouvrir le service</p>
-            <form action="/login" method="post" class="form-login" id="loginForm">
-                <div class="form-floating mb-3 mt-2">
-                    <input type="email" class="form-control" name="email" id="email" placeholder="nom@maquis.ci">
+            <img src="/static/icons/icon-512.png" alt="Logo Divix Maquis" class="img-fluid mb-3" style="max-width: 160px; height: auto;">
+            <p class="text-center text-muted mb-4">
+                Votre maquis, sa carte et sa caisse — en quelques secondes.
+            </p>
+            <form action="{{ url_for('inscription') }}" method="post" class="form-login" id="inscriptionForm">
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" name="etablissement" id="etablissement" placeholder="Maquis Le Baoulé" required>
+                    <label for="etablissement">Nom de l'établissement</label>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-7">
+                        <div class="form-floating">
+                            <input type="text" class="form-control" name="ville" id="ville" placeholder="Abidjan">
+                            <label for="ville">Ville</label>
+                        </div>
+                    </div>
+                    <div class="col-5">
+                        <div class="form-floating">
+                            <input type="tel" class="form-control" name="telephone" id="telephone" placeholder="+225">
+                            <label for="telephone">Téléphone</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" name="nom" id="nom" placeholder="Votre nom" required>
+                    <label for="nom">Votre nom (gérant)</label>
+                </div>
+                <div class="form-floating mb-3">
+                    <input type="email" class="form-control" name="email" id="email" placeholder="nom@maquis.ci" required>
                     <label for="email">Adresse email</label>
                 </div>
                 <div class="form-floating mb-3">
-                    <input type="password" class="form-control" name="password" id="password" placeholder="Mot de passe">
-                    <label for="password">Mot de passe</label>
+                    <input type="password" class="form-control" name="mot_de_passe" id="mot_de_passe" placeholder="Mot de passe" required>
+                    <label for="mot_de_passe">Mot de passe (6 caractères minimum)</label>
                 </div>
-                <div class="d-flex align-items-center mb-3">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="remember" value="1" id="remember">
-                        <label class="form-check-label small text-muted" for="remember">Se souvenir de moi</label>
-                    </div>
-                    <a href="#" class="ms-auto forgot-link">Mot de passe oublié?</a>
-                </div>
-                <button type="submit" class="btn-login">Se connecter</button>
+                <button type="submit" class="btn-login">Créer mon établissement</button>
                 <p class="text-center text-muted small mt-3 mb-0">
-                    Pas encore de compte ?
-                    <a href="{{ url_for('inscription') }}" class="forgot-link">Ouvrir mon établissement</a>
+                    Déjà inscrit ?
+                    <a href="{{ url_for('login') }}" class="forgot-link">Se connecter</a>
                 </p>
             </form>
         </div>
@@ -77,30 +93,24 @@
             bootstrap.Toast.getOrCreateInstance(toastEl).show();
         }
 
-        const loginForm = document.getElementById('loginForm');
-        const submitBtn = loginForm.querySelector('.btn-login');
+        const form = document.getElementById('inscriptionForm');
+        const submitBtn = form.querySelector('.btn-login');
         const originalBtnText = submitBtn.innerHTML;
 
-        loginForm.addEventListener('submit', async function (e) {
+        form.addEventListener('submit', async function (e) {
             e.preventDefault();
 
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-
-            if (!email || !password) {
-                showAlert('error', 'Veuillez remplir tous les champs');
-                return;
-            }
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                showAlert('error', 'Veuillez entrer une adresse email valide');
+            const motDePasse = document.getElementById('mot_de_passe').value;
+            if (motDePasse.length < 6) {
+                showAlert('error', 'Le mot de passe doit faire au moins 6 caractères');
                 return;
             }
 
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="bx bx-loader-lines bx-spin me-2"></i>Connexion en cours...';
+            submitBtn.innerHTML = '<i class="bx bx-loader-lines bx-spin me-2"></i>Création en cours...';
 
             try {
-                const response = await fetch('{{ url_for("login") }}', {
+                const response = await fetch('{{ url_for("inscription") }}', {
                     method: 'POST',
                     body: new FormData(this)
                 });
@@ -108,7 +118,7 @@
 
                 if (data.success) {
                     showAlert('success', data.message);
-                    setTimeout(() => { window.location.href = data.redirect; }, 800);
+                    setTimeout(() => { window.location.href = data.redirect; }, 1200);
                 } else {
                     showAlert('error', data.error || 'Une erreur est survenue');
                     submitBtn.disabled = false;
@@ -116,7 +126,7 @@
                 }
             } catch (error) {
                 console.error('Erreur:', error);
-                showAlert('error', 'Une erreur est survenue lors de la connexion');
+                showAlert('error', "Une erreur est survenue lors de l'inscription");
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalBtnText;
             }

@@ -1,0 +1,160 @@
+{% extends 'base-admin.html' %}
+{% block title %}Établissements - Divix Maquis{% endblock %}
+{% block subtitle %}Établissements{% endblock %}
+{% block content %}
+<div class="modal fade" id="etablissementModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="icon me-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M3 21h8V3H3zm2-16h4v2H5zm0 4h4v2H5zm0 4h4v2H5zm8 8h8V9h-8zm2-8h4v2h-4zm0 4h4v2h-4z"></path>
+            </svg>
+        </div>
+        <div>
+            <h1 class="modal-title fs-5">Nouvel établissement</h1>
+            <span class="small text-muted">Un maquis de plus sur la plateforme</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post" id="etablissementForm" class="vstack gap-2">
+            <div class="col mb-3">
+                <label for="etablissementNom" class="form-label">Nom <span class="small text-danger">*</span></label>
+                <input type="text" class="form-control" id="etablissementNom" name="nom" placeholder="ex: Maquis Le Baoulé" required>
+            </div>
+            <div class="d-flex gap-2">
+                <div class="col mb-3">
+                    <label for="etablissementVille" class="form-label">Ville</label>
+                    <input type="text" class="form-control" id="etablissementVille" name="ville" placeholder="ex: Abidjan">
+                </div>
+                <div class="col mb-3">
+                    <label for="etablissementTelephone" class="form-label">Téléphone</label>
+                    <input type="tel" class="form-control" id="etablissementTelephone" name="telephone" placeholder="+225">
+                </div>
+            </div>
+            <p class="small text-muted m-0">
+                L'établissement démarre avec toutes les fonctionnalités activées, mais
+                sans compte : son gérant s'inscrit avec l'adresse que vous lui donnez.
+            </p>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" id="submitEtablissementBtn" class="btn btn-primary">Créer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-wrapper d-flex flex-column gap-3">
+    <div class="add-box d-flex align-items-center w-100 px-2 gap-2">
+        <p class="m-0"><span class="text-muted">Plateforme / </span><span class="fw-medium">Établissements</span></p>
+        {% if peut('plateforme_add') %}
+        <button class="ms-auto btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#etablissementModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"></path>
+            </svg>
+            <span class="mx-1">Établissement</span>
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="w-100 row g-2 g-md-3 g-lg-3 px-0 mx-0">
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M3 21h8V3H3zm2-16h4v2H5zm0 4h4v2H5zm0 4h4v2H5zm8 8h8V9h-8zm2-8h4v2h-4zm0 4h4v2h-4z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Établissements</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="countertotal_etablissements"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m-1 15-4-4 1.41-1.41L11 14.17l5.59-5.59L18 10z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">En service</span>
+                    </div>
+                    <span class="ms-auto badge badge-success">Actifs</span>
+                </div>
+                <h1 class="mt-2"><span id="counteretablissements_actifs"></span></h1>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4 card-group">
+            <div class="card feature-card border-0 shadow-sm p-3">
+                <div class="d-flex w-100">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4m0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Comptes ouverts</span>
+                    </div>
+                </div>
+                <h1 class="mt-2"><span id="countercomptes_total"></span></h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-100 row g-3 px-0 mx-0">
+        <div class="col-12 card-group">
+            <div class="card feature-card result-table border-0 shadow-sm p-3">
+                <div class="d-flex w-100 filter">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M16 16H2v2h14v4l6-5-6-5zM8 1 2 6l6 5V7h14V5H8z"></path>
+                            </svg>
+                        </div>
+                        <span class="small text-muted">Tous les établissements</span>
+                    </div>
+                    <div class="ms-auto d-flex gap-2 filter-content">
+                        <select id="filtreEtat" class="form-select rounded-pill">
+                            <option value="">Tous les états</option>
+                            <option value="1">En service</option>
+                            <option value="0">Suspendus</option>
+                        </select>
+                        <form action="" class="d-flex align-items-center rounded-pill" id="searchForm" onsubmit="return false;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M10.5 19c1.98 0 3.81-.69 5.25-1.83L20 21.42l1.41-1.41-4.25-4.25a8.47 8.47 0 0 0 1.83-5.25c0-4.69-3.81-8.5-8.5-8.5S2 5.81 2 10.5 5.81 19 10.5 19m0-15c3.58 0 6.5 2.92 6.5 6.5S14.08 17 10.5 17 4 14.08 4 10.5 6.92 4 10.5 4"></path>
+                            </svg>
+                            <input type="text" class="ms-2" placeholder="Recherche..." id="searchInput" name="searchInput">
+                        </form>
+                    </div>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="table last-command align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th class="text-muted" scope="col">ÉTABLISSEMENT</th>
+                                <th class="text-muted" scope="col">VILLE</th>
+                                <th class="text-muted" scope="col">TÉLÉPHONE</th>
+                                <th class="text-muted" scope="col">COMPTES</th>
+                                <th class="text-muted" scope="col">COMMANDES</th>
+                                <th class="text-muted" scope="col">ENCAISSÉ</th>
+                                <th class="text-muted" scope="col">ÉTAT</th>
+                                <th class="text-muted" scope="col">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody class="result" id="tbody-plateforme"></tbody>
+                    </table>
+                </div>
+                <div class="pagination-liste" id="pagination-plateforme"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

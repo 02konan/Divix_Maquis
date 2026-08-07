@@ -1,4 +1,10 @@
-"""Toutes les écritures : commandes, encaissements, menu, stock, dépenses."""
+"""Toutes les écritures : commandes, encaissements, menu, stock, dépenses.
+
+Comme les lectures, chaque requête est cadrée sur l'établissement courant. Les
+écritures le posent en colonne à l'insertion, et le vérifient en condition à la
+mise à jour : sans cette condition, un identifiant deviné dans une URL laisserait
+modifier l'article ou la table d'un autre maquis.
+"""
 
 from werkzeug.security import generate_password_hash
 
@@ -7,8 +13,10 @@ from backend.database import (
     connexion,
     executer,
     generer_reference,
+    lire_un,
     message_erreur,
 )
+from backend.etablissement import courant
 
 LONGUEUR_MOT_DE_PASSE = 6
 
@@ -35,8 +43,9 @@ CATEGORIES_DEPENSE = [
 def creer_table(numero, zone, places):
     try:
         id_table = executer(
-            "INSERT INTO tables_salle (numero, zone, places) VALUES (%s, %s, %s)",
-            (numero, zone, int(places)),
+            """INSERT INTO tables_salle (id_etablissement, numero, zone, places)
+               VALUES (%s, %s, %s, %s)""",
+            (courant(), numero, zone, int(places)),
         )
         return {"success": True, "id_table": id_table}
     except Exception as erreur:
@@ -47,7 +56,11 @@ def changer_statut_table(id_table, statut):
     if statut not in STATUTS_TABLE:
         return {"success": False, "error": "Statut de table invalide"}
     try:
-        executer("UPDATE tables_salle SET statut = %s WHERE id = %s", (statut, id_table))
+        executer(
+            """UPDATE tables_salle SET statut = %s
+               WHERE id = %s AND id_etablissement = %s""",
+            (statut, id_table, courant()),
+        )
         return {"success": True}
     except Exception as erreur:
         return {"success": False, "error": message_erreur(erreur)}
@@ -70,34 +83,39 @@ def creer_article(
     image,
     id_utilisateur,
 ):
+    stock_initial = int(stock or 0) if int(gere_stock) else 0
+
     try:
         reference = generer_reference("ART", "articles")
         id_article = executer(
             """
-            INSERT INTO articles (reference, nom, id_categorie, prix, cout_revient,
-                                  gere_stock, stock, seuil_alerte, disponible,
-                                  image, id_utilisateur)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO articles (id_etablissement, reference, nom, id_categorie,
+                                  prix, cout_revient, gere_stock, stock,
+                                  seuil_alerte, disponible, image, id_utilisateur)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s)
             """,
             (
+                courant(),
                 reference,
                 nom,
                 id_categorie,
                 float(prix),
                 float(cout_revient or 0),
                 int(gere_stock),
-                int(stock or 0),
                 int(seuil_alerte or 0),
                 int(disponible),
                 image,
                 id_utilisateur,
             ),
         )
-        if int(gere_stock) and int(stock or 0) > 0:
+        # L'article naît à zéro et le stock déclaré arrive par un mouvement : le
+        # poser aussi à l'insertion le comptait deux fois, un article créé avec
+        # 50 bouteilles en affichait 100 et le journal ne collait plus au stock.
+        if stock_initial > 0:
             enregistrer_mouvement(
                 id_article,
                 "Entrée",
-                int(stock),
+                stock_initial,
                 "Stock initial",
                 id_utilisateur,
             )
@@ -144,8 +162,9 @@ def modifier_article(
             valeurs.append(image)
 
         executer(
-            f"UPDATE articles SET {', '.join(champs)} WHERE id = %s",
-            (*valeurs, int(id_article)),
+            f"""UPDATE articles SET {', '.join(champs)}
+                WHERE id = %s AND id_etablissement = %s""",
+            (*valeurs, int(id_article), courant()),
         )
         return {"success": True, "id_article": int(id_article)}
     except Exception as erreur:
@@ -155,8 +174,9 @@ def modifier_article(
 def basculer_disponibilite(id_article, disponible):
     try:
         executer(
-            "UPDATE articles SET disponible = %s WHERE id = %s",
-            (1 if disponible else 0, id_article),
+            """UPDATE articles SET disponible = %s
+               WHERE id = %s AND id_etablissement = %s""",
+            (1 if disponible else 0, id_article, courant()),
         )
         return {"success": True}
     except Exception as erreur:
@@ -166,7 +186,8 @@ def basculer_disponibilite(id_article, disponible):
 def creer_categorie(nom, type_categorie):
     try:
         id_categorie = executer(
-            "INSERT INTO categories (nom, type) VALUES (%s, %s)", (nom, type_categorie)
+            "INSERT INTO categories (id_etablissement, nom, type) VALUES (%s, %s, %s)",
+            (courant(), nom, type_categorie),
         )
         return {"success": True, "id_categorie": id_categorie}
     except Exception as erreur:
@@ -191,8 +212,8 @@ def enregistrer_mouvement(id_article, type_mouvement, quantite, motif, id_utilis
             # stock de départ et l'un des deux écrase la mise à jour de l'autre.
             ligne = conn.execute(
                 """SELECT stock, gere_stock FROM articles
-                   WHERE id = %s FOR UPDATE""",
-                (id_article,),
+                   WHERE id = %s AND id_etablissement = %s FOR UPDATE""",
+                (id_article, courant()),
             ).fetchone()
             if not ligne:
                 return {"success": False, "error": "Article introuvable"}
@@ -214,10 +235,11 @@ def enregistrer_mouvement(id_article, type_mouvement, quantite, motif, id_utilis
             )
             conn.execute(
                 """INSERT INTO mouvements_stock
-                   (id_article, type_mouvement, quantite, stock_apres, motif,
-                    id_utilisateur)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                   (id_etablissement, id_article, type_mouvement, quantite,
+                    stock_apres, motif, id_utilisateur)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                 (
+                    courant(),
                     id_article,
                     type_mouvement,
                     quantite,
@@ -253,14 +275,24 @@ def refuser_hors_domaine(conn, articles, domaines):
     intrus = conn.execute(
         f"""SELECT a.nom FROM articles a
             LEFT JOIN categories c ON a.id_categorie = c.id
-            WHERE a.id IN ({marqueurs_ids})
+            WHERE a.id IN ({marqueurs_ids}) AND a.id_etablissement = %s
               AND (c.type IS NULL OR c.type NOT IN ({marqueurs_domaines}))""",
-        (*ids, *domaines),
+        (*ids, courant(), *domaines),
     ).fetchall()
 
     if intrus:
         noms = ", ".join(ligne["nom"] for ligne in intrus)
         raise ValueError(f"{noms} ne fait pas partie de votre carte")
+
+
+def table_du_meme_etablissement(id_table):
+    return (
+        lire_un(
+            "SELECT id FROM tables_salle WHERE id = %s AND id_etablissement = %s",
+            (id_table, courant()),
+        )
+        is not None
+    )
 
 
 def verrouiller_articles(conn, articles):
@@ -272,8 +304,10 @@ def verrouiller_articles(conn, articles):
     ids = sorted({int(article["id_article"]) for article in articles})
     marqueurs = ", ".join(["%s"] * len(ids))
     conn.execute(
-        f"SELECT id FROM articles WHERE id IN ({marqueurs}) ORDER BY id FOR UPDATE",
-        tuple(ids),
+        f"""SELECT id FROM articles
+            WHERE id IN ({marqueurs}) AND id_etablissement = %s
+            ORDER BY id FOR UPDATE""",
+        (*ids, courant()),
     )
 
 
@@ -295,6 +329,12 @@ def creer_commande(
     if type_service not in TYPES_SERVICE:
         return {"success": False, "error": "Type de service invalide"}
 
+    # La table vient du formulaire : sans cette vérification, un identifiant
+    # deviné occuperait une table du maquis d'à côté. Les articles, eux, sont
+    # relus sous verrou dans l'établissement, plus bas.
+    if id_table and not table_du_meme_etablissement(id_table):
+        return {"success": False, "error": "Cette table n'existe pas ici"}
+
     reference = generer_reference("CMD", "commandes")
 
     try:
@@ -307,8 +347,9 @@ def creer_commande(
             for article in articles:
                 ligne = conn.execute(
                     """SELECT id, nom, prix, gere_stock, stock, disponible
-                       FROM articles WHERE id = %s FOR UPDATE""",
-                    (article["id_article"],),
+                       FROM articles
+                       WHERE id = %s AND id_etablissement = %s FOR UPDATE""",
+                    (article["id_article"], courant()),
                 ).fetchone()
                 if not ligne:
                     raise ValueError(f"Article {article['id_article']} introuvable")
@@ -346,12 +387,14 @@ def creer_commande(
 
             id_commande = conn.execute(
                 """
-                INSERT INTO commandes (reference, id_table, type_service, nom_client,
-                                       telephone_client, couverts, montant_total,
-                                       remise, commentaire, id_utilisateur)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO commandes (id_etablissement, reference, id_table,
+                                       type_service, nom_client, telephone_client,
+                                       couverts, montant_total, remise,
+                                       commentaire, id_utilisateur)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
+                    courant(),
                     reference,
                     id_table or None,
                     type_service,
@@ -388,9 +431,11 @@ def creer_commande(
                     )
                     conn.execute(
                         """INSERT INTO mouvements_stock
-                           (id_article, type_mouvement, quantite, stock_apres, motif, id_utilisateur)
-                           VALUES (%s, 'Sortie', %s, %s, %s, %s)""",
+                           (id_etablissement, id_article, type_mouvement, quantite,
+                            stock_apres, motif, id_utilisateur)
+                           VALUES (%s, %s, 'Sortie', %s, %s, %s, %s)""",
                         (
+                            courant(),
                             ligne["id_article"],
                             ligne["quantite"],
                             stock_apres,
@@ -424,7 +469,9 @@ def changer_statut_commande(reference, statut, domaines=None):
     try:
         with connexion() as conn:
             commande = conn.execute(
-                "SELECT id, id_table FROM commandes WHERE reference = %s", (reference,)
+                """SELECT id, id_table FROM commandes
+                   WHERE reference = %s AND id_etablissement = %s""",
+                (reference, courant()),
             ).fetchone()
             if not commande:
                 return {"success": False, "error": "Commande introuvable"}
@@ -506,8 +553,8 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
             # liraient le même reste à payer et pourraient le dépasser.
             commande = conn.execute(
                 """SELECT id, montant_total, statut FROM commandes
-                   WHERE reference = %s FOR UPDATE""",
-                (reference_commande,),
+                   WHERE reference = %s AND id_etablissement = %s FOR UPDATE""",
+                (reference_commande, courant()),
             ).fetchone()
             if not commande:
                 return {"success": False, "error": "Commande introuvable"}
@@ -533,9 +580,11 @@ def encaisser(id_utilisateur, reference_commande, montant, mode, commentaire):
             reference = generer_reference("PAI", "paiements")
             conn.execute(
                 """INSERT INTO paiements
-                   (reference, id_commande, montant, mode, commentaire, id_utilisateur)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                   (id_etablissement, reference, id_commande, montant, mode,
+                    commentaire, id_utilisateur)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                 (
+                    courant(),
                     reference,
                     commande["id"],
                     montant,
@@ -591,6 +640,7 @@ def creer_depense(
 
         reference = generer_reference("DEP", "depenses")
         parametres = [
+            courant(),
             reference,
             libelle,
             categorie,
@@ -603,18 +653,20 @@ def creer_depense(
 
         if date_depense:
             executer(
-                """INSERT INTO depenses (reference, libelle, categorie, montant,
-                                         fournisseur, mode_paiement, commentaire,
+                """INSERT INTO depenses (id_etablissement, reference, libelle,
+                                         categorie, montant, fournisseur,
+                                         mode_paiement, commentaire,
                                          id_utilisateur, date_depense)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (*parametres, date_depense),
             )
         else:
             executer(
-                """INSERT INTO depenses (reference, libelle, categorie, montant,
-                                         fournisseur, mode_paiement, commentaire,
+                """INSERT INTO depenses (id_etablissement, reference, libelle,
+                                         categorie, montant, fournisseur,
+                                         mode_paiement, commentaire,
                                          id_utilisateur)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 tuple(parametres),
             )
 
@@ -626,6 +678,27 @@ def creer_depense(
 # ----------------------------------------------------------------------------
 # UTILISATEURS
 # ----------------------------------------------------------------------------
+
+
+def role_refuse(id_role):
+    """Message expliquant pourquoi ce rôle ne peut pas être attribué ici, ou None.
+
+    Le contrôle est ici et pas seulement dans la liste déroulante : un
+    formulaire forgé enverrait n'importe quel identifiant de rôle.
+    """
+    from backend import modules, roles
+
+    ligne = lire_un("SELECT nom FROM roles WHERE id = %s", (int(id_role),))
+    if not ligne:
+        return "Ce rôle n'existe pas."
+    if ligne["nom"] == roles.ROLE_PLATEFORME:
+        return "Ce rôle est réservé à l'éditeur du logiciel."
+    if ligne["nom"] in roles.ROLES_SERVEUR and not modules.actif("serveur"):
+        return (
+            "Cet établissement ne fonctionne pas avec des serveurs connectés : "
+            "activez la fonctionnalité « Serveurs » pour attribuer ce rôle."
+        )
+    return None
 
 
 def creer_compte(nom, email, mot_de_passe, id_role):
@@ -641,7 +714,12 @@ def creer_compte(nom, email, mot_de_passe, id_role):
         }
 
     try:
-        id_utilisateur = creer_utilisateur(nom, email, mot_de_passe, int(id_role))
+        refus = role_refuse(id_role)
+        if refus:
+            return {"success": False, "error": refus}
+        id_utilisateur = creer_utilisateur(
+            nom, email, mot_de_passe, int(id_role), courant()
+        )
         return {"success": True, "id_utilisateur": id_utilisateur}
     except Exception as erreur:
         return {"success": False, "error": message_erreur(erreur)}
@@ -656,8 +734,9 @@ def basculer_compte(id_utilisateur, actif, id_courant):
         }
     try:
         executer(
-            "UPDATE utilisateurs SET actif = %s WHERE id = %s",
-            (1 if actif else 0, int(id_utilisateur)),
+            """UPDATE utilisateurs SET actif = %s
+               WHERE id = %s AND id_etablissement = %s""",
+            (1 if actif else 0, int(id_utilisateur), courant()),
         )
         return {"success": True}
     except Exception as erreur:
@@ -672,9 +751,13 @@ def changer_role(id_utilisateur, id_role, id_courant):
             "error": "Vous ne pouvez pas changer votre propre rôle",
         }
     try:
+        refus = role_refuse(id_role)
+        if refus:
+            return {"success": False, "error": refus}
         executer(
-            "UPDATE utilisateurs SET id_role = %s WHERE id = %s",
-            (int(id_role), int(id_utilisateur)),
+            """UPDATE utilisateurs SET id_role = %s
+               WHERE id = %s AND id_etablissement = %s""",
+            (int(id_role), int(id_utilisateur), courant()),
         )
         return {"success": True}
     except Exception as erreur:
@@ -689,8 +772,9 @@ def reinitialiser_mot_de_passe(id_utilisateur, mot_de_passe):
         }
     try:
         executer(
-            "UPDATE utilisateurs SET mot_de_passe = %s WHERE id = %s",
-            (generate_password_hash(mot_de_passe), int(id_utilisateur)),
+            """UPDATE utilisateurs SET mot_de_passe = %s
+               WHERE id = %s AND id_etablissement = %s""",
+            (generate_password_hash(mot_de_passe), int(id_utilisateur), courant()),
         )
         return {"success": True}
     except Exception as erreur:

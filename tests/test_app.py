@@ -62,6 +62,12 @@ def app_maquis():
 
     from app import app
 
+    # Les tests qui appellent `lectures`/`ecritures` sans passer par une requête
+    # HTTP ont besoin du même contexte que `before_request` pose en service.
+    from backend import etablissement
+
+    etablissement.definir(etablissement.liste()[0]["id"])
+
     app.config.update(TESTING=True, SECRET_KEY="test")
     yield app
 
@@ -276,11 +282,17 @@ def _en_parallele(action, nb_fils):
     """Lance `action` dans plusieurs fils libérés au même instant."""
     import threading
 
+    from backend import etablissement
+
+    # Un fil neuf démarre sur un contexte vide : l'établissement doit y être
+    # reposé, comme le fait `before_request` pour chaque requête servie.
+    id_etablissement = etablissement.courant()
     resultats = []
     verrou = threading.Lock()
     depart = threading.Barrier(nb_fils)
 
     def executer_action():
+        etablissement.definir(id_etablissement)
         depart.wait()
         resultat = action()
         with verrou:
@@ -347,7 +359,23 @@ COMPTES = {
     "Serveur": ("serveur@divixmaquis.ci", "serveur123"),
     "Serveur bar": ("bar@divixmaquis.ci", "bar123"),
     "Serveur restaurant": ("resto@divixmaquis.ci", "resto123"),
+    "Administrateur plateforme": ("plateforme@divix.ci", "plateforme123"),
 }
+
+
+def _cadrer():
+    """Repose l'établissement de démonstration dans le contexte du test.
+
+    Toute requête HTTP y pose celui de sa session — donc rien quand elle est
+    anonyme, comme le POST de connexion. Un test qui appelle ensuite `lectures`
+    ou `ecritures` directement doit le reposer, exactement comme le ferait la
+    requête suivante.
+    """
+    from backend import etablissement
+
+    id_etablissement = etablissement.liste()[0]["id"]
+    etablissement.definir(id_etablissement)
+    return id_etablissement
 
 
 def _connecte_en(app_maquis, role):
@@ -355,6 +383,7 @@ def _connecte_en(app_maquis, role):
     email, mot_de_passe = COMPTES[role]
     reponse = client.post("/login", data={"email": email, "password": mot_de_passe})
     assert reponse.get_json()["success"] is True
+    _cadrer()
     return client
 
 
@@ -848,10 +877,27 @@ def test_tickets_separes_entre_bar_et_restaurant(app_maquis):
 
 def test_roles_declares_presents_en_base(app_maquis):
     """Une base déjà en service doit recevoir les rôles ajoutés depuis."""
-    from backend import lectures, roles
+    from backend import roles
+    from backend.database import lire_tout
 
-    en_base = {role["nom"] for role in lectures.liste_roles()}
+    en_base = {ligne["nom"] for ligne in lire_tout("SELECT nom FROM roles")}
     assert set(roles.PAGES_PAR_ROLE) <= en_base
+
+
+def test_le_role_plateforme_n_est_pas_attribuable_dans_un_maquis(app_maquis):
+    """Le gérant ne doit pas pouvoir se hisser au niveau de l'éditeur."""
+    from backend import ecritures, lectures, roles
+    from backend.database import lire_un
+
+    _cadrer()
+    assert roles.ROLE_PLATEFORME not in {r["nom"] for r in lectures.liste_roles()}
+
+    id_plateforme = lire_un(
+        "SELECT id FROM roles WHERE nom = %s", (roles.ROLE_PLATEFORME,)
+    )["id"]
+    refus = ecritures.creer_compte("X", "x@x.ci", "xxxxxx", id_plateforme)
+    assert refus["success"] is False
+    assert "réservé à l'éditeur" in refus["error"]
 
 
 def test_le_gerant_cree_un_compte_utilisable(app_maquis):
@@ -1110,3 +1156,457 @@ def test_la_barre_de_panier_ouvre_le_formulaire_de_commande(app_maquis):
     script = (RACINE / "static" / "js" / "carte.js").read_text(encoding="utf-8")
     assert "'/commande?nouvelle=1'" in script
 
+
+
+# ----------------------------------------------------------------------------
+# PLUSIEURS ÉTABLISSEMENTS DANS LA MÊME BASE
+# ----------------------------------------------------------------------------
+
+# Tout ce que crée le maquis voisin porte ce mot : une lecture qui le laisse
+# passer a oublié son filtre d'établissement.
+MARQUE_VOISIN = "VOISIN"
+
+
+def _peupler_voisin():
+    """Un second maquis complet, dont chaque ligne est reconnaissable."""
+    from backend import ecritures, etablissement
+    from backend.auth import creer_utilisateur
+    from backend.database import lire_un
+
+    voisin = etablissement.creer(f"Maquis {MARQUE_VOISIN}", MARQUE_VOISIN)[
+        "id_etablissement"
+    ]
+    etablissement.definir(voisin)
+
+    id_role = lire_un("SELECT id FROM roles WHERE nom = 'Gérant'")["id"]
+    id_gerant = creer_utilisateur(
+        f"Gérant {MARQUE_VOISIN}", "voisin@maquis.ci", "voisin123", id_role, voisin
+    )
+
+    id_categorie = ecritures.creer_categorie(f"Bières {MARQUE_VOISIN}", "Bar")[
+        "id_categorie"
+    ]
+    article = ecritures.creer_article(
+        nom=f"Bière {MARQUE_VOISIN}",
+        id_categorie=id_categorie,
+        prix=999,
+        cout_revient=500,
+        gere_stock=1,
+        stock=50,
+        seuil_alerte=5,
+        disponible=1,
+        image=None,
+        id_utilisateur=id_gerant,
+    )
+    id_table = ecritures.creer_table(f"T-{MARQUE_VOISIN}", MARQUE_VOISIN, 4)["id_table"]
+
+    commande = ecritures.creer_commande(
+        id_utilisateur=id_gerant,
+        id_table=id_table,
+        type_service="Sur place",
+        nom_client=f"Client {MARQUE_VOISIN}",
+        telephone_client=None,
+        couverts=2,
+        remise=0,
+        commentaire=MARQUE_VOISIN,
+        articles=[{"id_article": article["id_article"], "quantite": 1}],
+    )
+    assert commande["success"] is True
+    paiement = ecritures.encaisser(
+        id_gerant, commande["reference"], 999, "Espèces", MARQUE_VOISIN
+    )
+    assert paiement["success"] is True
+    ecritures.creer_depense(
+        id_gerant, f"Charbon {MARQUE_VOISIN}", "Divers", 4242, None, "Espèces", None, None
+    )
+    ecritures.enregistrer_mouvement(
+        article["id_article"], "Entrée", 3, f"Appro {MARQUE_VOISIN}", id_gerant
+    )
+
+    return {
+        "id": voisin,
+        "id_article": article["id_article"],
+        "id_categorie": id_categorie,
+        "id_table": id_table,
+        "id_commande": commande["id_commande"],
+        "reference": commande["reference"],
+    }
+
+
+def _lectures_sans_argument():
+    """Fonctions publiques de `lectures` appelables sans rien fournir."""
+    import inspect
+
+    from backend import lectures
+
+    for nom, fonction in inspect.getmembers(lectures, inspect.isfunction):
+        if nom.startswith("_") or fonction.__module__ != "backend.lectures":
+            continue
+        parametres = inspect.signature(fonction).parameters.values()
+        if all(p.default is not inspect.Parameter.empty for p in parametres):
+            yield nom, fonction
+
+
+def test_aucune_lecture_ne_laisse_passer_l_autre_etablissement(app_maquis):
+    """Le filtre d'établissement est vérifié sur toutes les lectures, pas sur un échantillon.
+
+    Un filtre oublié dans une seule requête montrerait les données d'un maquis
+    à un autre : le test parcourt donc tout `backend.lectures`.
+    """
+    import json
+
+    from backend import etablissement
+
+    maison = _cadrer()
+    _peupler_voisin()
+    etablissement.definir(maison)
+
+    fuites = []
+    for nom, fonction in _lectures_sans_argument():
+        rendu = json.dumps(fonction(), ensure_ascii=False, default=str)
+        if MARQUE_VOISIN in rendu:
+            fuites.append(nom)
+
+    assert fuites == []
+
+
+def test_les_compteurs_ignorent_l_autre_etablissement(app_maquis):
+    """Une fuite chiffrée ne se voit pas dans un nom : on compare avant et après."""
+    from backend import etablissement, lectures
+
+    maison = _cadrer()
+    mesures = [
+        lectures.compteurs_salle,
+        lectures.compteurs_menu,
+        lectures.compteurs_stock,
+        lectures.compteurs_commandes,
+        lectures.compteurs_caisse,
+        lectures.compteurs_depenses,
+        lectures.indicateurs_jour,
+    ]
+    avant = {mesure.__name__: mesure() for mesure in mesures}
+
+    _peupler_voisin()
+    etablissement.definir(maison)
+
+    assert {mesure.__name__: mesure() for mesure in mesures} == avant
+
+
+def test_les_lectures_par_identifiant_ne_traversent_pas(app_maquis):
+    """Un identifiant deviné ne doit pas ouvrir la fiche du maquis d'à côté."""
+    from backend import etablissement, lectures
+
+    maison = _cadrer()
+    voisin = _peupler_voisin()
+    etablissement.definir(maison)
+
+    assert lectures.article_par_id(voisin["id_article"]) is None
+    assert lectures.categorie_du_domaine(voisin["id_categorie"]) is None
+    assert lectures.table_par_id(voisin["id_table"]) is None
+    assert lectures.resumes_articles([voisin["id_commande"]]) == {}
+
+
+def test_une_reference_partagee_rend_le_ticket_de_chacun(app_maquis):
+    """Les deux maquis ont un CMD-0001 : chacun doit tomber sur le sien.
+
+    C'est le cas qui distingue un vrai cloisonnement d'un filtre approximatif —
+    la référence ne suffit plus à désigner une commande.
+    """
+    from backend import etablissement, lectures
+
+    maison = _cadrer()
+    voisin = _peupler_voisin()
+    assert voisin["reference"] == "CMD-0001"
+
+    chez_le_voisin = lectures.detail_commande(voisin["reference"])
+    assert chez_le_voisin["id"] == voisin["id_commande"]
+    assert chez_le_voisin["nom_client"] == f"Client {MARQUE_VOISIN}"
+
+    etablissement.definir(maison)
+    chez_nous = lectures.detail_commande(voisin["reference"])
+    assert chez_nous["id"] != voisin["id_commande"]
+    assert MARQUE_VOISIN not in str(chez_nous)
+
+
+def test_les_ecritures_par_identifiant_ne_traversent_pas(app_maquis):
+    """Même chose côté écriture : rien ne doit changer chez le voisin."""
+    from backend import ecritures, etablissement
+    from backend.database import lire_un
+
+    maison = _cadrer()
+    voisin = _peupler_voisin()
+    etablissement.definir(maison)
+
+    ecritures.modifier_article(
+        voisin["id_article"], "Détourné", None, 1, 0, 0, 0, 1, None
+    )
+    ecritures.basculer_disponibilite(voisin["id_article"], False)
+    ecritures.changer_statut_table(voisin["id_table"], "Réservée")
+    mouvement = ecritures.enregistrer_mouvement(
+        voisin["id_article"], "Sortie", 10, "Détournement", 1
+    )
+
+    article = lire_un(
+        "SELECT nom, disponible, stock FROM articles WHERE id = %s",
+        (voisin["id_article"],),
+    )
+    assert article["nom"] == f"Bière {MARQUE_VOISIN}"
+    assert article["disponible"] == 1
+    assert article["stock"] == 52  # 50 à la création − 1 vendu + 3 d'appro
+    assert mouvement["success"] is False
+    assert (
+        lire_un("SELECT statut FROM tables_salle WHERE id = %s", (voisin["id_table"],))[
+            "statut"
+        ]
+        # Libérée par son propre encaissement, et pas « Réservée » par nous.
+        == "Libre"
+    )
+
+
+def test_les_references_repartent_de_un_dans_chaque_etablissement(app_maquis):
+    """Deux maquis peuvent avoir chacun leur CMD-0001 : la numérotation leur est propre."""
+    _cadrer()
+    voisin = _peupler_voisin()
+    assert voisin["reference"] == "CMD-0001"
+
+
+def test_un_gerant_ne_voit_que_son_etablissement(app_maquis):
+    """Le cloisonnement tient aussi de bout en bout, à travers l'interface."""
+    from backend import etablissement
+
+    maison = _cadrer()
+    _peupler_voisin()
+    etablissement.definir(maison)
+
+    voisin = app_maquis.test_client()
+    assert voisin.post(
+        "/login", data={"email": "voisin@maquis.ci", "password": "voisin123"}
+    ).get_json()["success"] is True
+
+    articles = voisin.get("/maquis/list").get_json()["data"]
+    assert [article["nom"] for article in articles] == [f"Bière {MARQUE_VOISIN}"]
+
+    maison_client = _connecte_en(app_maquis, "Gérant")
+    noms = {a["nom"] for a in maison_client.get("/maquis/list").get_json()["data"]}
+    assert f"Bière {MARQUE_VOISIN}" not in noms
+    assert "Bière Flag 66cl" in noms
+
+
+def test_inscription_ouvre_un_etablissement_et_son_gerant(app_maquis):
+    client = app_maquis.test_client()
+    reponse = client.post(
+        "/inscription",
+        data={
+            "etablissement": "Chez Awa",
+            "ville": "Yamoussoukro",
+            "nom": "Awa",
+            "email": "awa@chezawa.ci",
+            "mot_de_passe": "awa12345",
+        },
+    )
+    assert reponse.get_json()["success"] is True
+
+    nouveau = app_maquis.test_client()
+    assert nouveau.post(
+        "/login", data={"email": "awa@chezawa.ci", "password": "awa12345"}
+    ).get_json()["success"] is True
+
+    # Un établissement neuf démarre vide, et avec toutes ses fonctionnalités.
+    assert nouveau.get("/menu/list").get_json()["data"] == []
+    assert nouveau.get("/administration").status_code == 200
+
+
+def test_inscription_refuse_un_formulaire_incomplet(app_maquis):
+    from backend import etablissement
+
+    avant = len(etablissement.liste())
+    client = app_maquis.test_client()
+    assert client.post("/inscription", data={"etablissement": "Sans gérant"}).status_code == 400
+    # Aucun établissement orphelin ne doit rester derrière un refus.
+    assert len(etablissement.liste()) == avant
+
+
+def test_console_plateforme_reservee_a_l_editeur(app_maquis):
+    assert _connecte_en(app_maquis, "Gérant").get("/plateforme").status_code == 302
+    assert _connecte_en(app_maquis, "Caissier").get("/plateforme/list").status_code == 403
+
+    editeur = _connecte_en(app_maquis, "Administrateur plateforme")
+    donnees = editeur.get("/plateforme/list").get_json()
+    assert donnees["counter"]["total_etablissements"] >= 1
+    # L'éditeur n'a pas de maquis : les pages de service lui sont fermées.
+    assert editeur.get("/caisse").status_code == 302
+
+
+def test_etablissement_suspendu_ferme_la_porte(app_maquis):
+    from backend import etablissement
+
+    maison = _cadrer()
+    editeur = _connecte_en(app_maquis, "Administrateur plateforme")
+    assert editeur.post(
+        f"/plateforme/{maison}/actif", data={"actif": "0"}
+    ).get_json()["success"] is True
+
+    refus = app_maquis.test_client().post(
+        "/login", data={"email": "admin@divixmaquis.ci", "password": "admin123"}
+    )
+    assert refus.status_code == 403
+    assert "suspendu" in refus.get_json()["error"]
+
+    assert editeur.post(
+        f"/plateforme/{maison}/actif", data={"actif": "1"}
+    ).get_json()["success"] is True
+    assert app_maquis.test_client().post(
+        "/login", data={"email": "admin@divixmaquis.ci", "password": "admin123"}
+    ).get_json()["success"] is True
+
+
+# ----------------------------------------------------------------------------
+# FONCTIONNALITÉ « SERVEURS »
+# ----------------------------------------------------------------------------
+
+
+def _couper_les_serveurs(app_maquis):
+    gerant = _connecte_en(app_maquis, "Gérant")
+    reponse = gerant.post(
+        "/administration/modules", data={"cle": "serveur", "actif": "0"}
+    )
+    assert reponse.get_json()["success"] is True
+    _cadrer()
+    return gerant
+
+
+def test_serveurs_coupes_refusent_la_connexion(app_maquis):
+    """Un maquis où le caissier saisit tout n'a pas de serveur qui se connecte."""
+    _couper_les_serveurs(app_maquis)
+
+    refus = app_maquis.test_client().post(
+        "/login", data={"email": "bar@divixmaquis.ci", "password": "bar123"}
+    )
+    assert refus.status_code == 403
+    assert "serveurs connectés" in refus.get_json()["error"]
+
+    # Le caissier et le gérant, eux, continuent d'entrer.
+    assert app_maquis.test_client().post(
+        "/login", data={"email": "caisse@divixmaquis.ci", "password": "caisse123"}
+    ).get_json()["success"] is True
+
+
+def test_serveurs_coupes_retirent_les_roles_de_la_liste(app_maquis):
+    from backend import ecritures, lectures, roles
+
+    _couper_les_serveurs(app_maquis)
+
+    proposes = {role["nom"] for role in lectures.liste_roles(serveurs_actifs=False)}
+    assert not (proposes & roles.ROLES_SERVEUR)
+
+    # Masquer ne suffit pas : le rôle doit aussi être refusé au serveur.
+    id_bar = next(
+        role["id"]
+        for role in lectures.liste_roles()
+        if role["nom"] == "Serveur bar"
+    )
+    refus = ecritures.creer_compte("Koffi", "koffi@x.ci", "koffi123", id_bar)
+    assert refus["success"] is False
+    assert "serveurs connectés" in refus["error"]
+
+
+def test_serveurs_rendus_rouvrent_les_comptes(app_maquis):
+    """Rien n'est supprimé : réactiver la fonctionnalité rend l'accès tel quel."""
+    gerant = _couper_les_serveurs(app_maquis)
+    assert gerant.post(
+        "/administration/modules", data={"cle": "serveur", "actif": "1"}
+    ).get_json()["success"] is True
+
+    assert app_maquis.test_client().post(
+        "/login", data={"email": "bar@divixmaquis.ci", "password": "bar123"}
+    ).get_json()["success"] is True
+
+
+def test_serveur_deja_connecte_est_mis_dehors(app_maquis):
+    """Couper la fonctionnalité ne doit pas laisser les sessions ouvertes vivre leur vie."""
+    serveur = _connecte_en(app_maquis, "Serveur bar")
+    assert serveur.get("/commande").status_code == 200
+
+    _couper_les_serveurs(app_maquis)
+
+    # La session est revérifiée de loin en loin : on avance l'horloge. Chaque
+    # requête part d'une session encore ouverte, puisque le refus la vide.
+    with serveur.session_transaction() as session:
+        session["verifie_le"] = 0
+    appel = serveur.get("/commande/list")
+    assert appel.status_code == 403
+    assert "reconnectez-vous" in appel.get_json()["error"]
+
+    with serveur.session_transaction() as session:
+        session.update(
+            connecte=True, user_id=4, user_role="Serveur bar", verifie_le=0,
+            id_etablissement=_cadrer(),
+        )
+    assert serveur.get("/commande").status_code == 302
+
+
+def test_stock_initial_compte_une_seule_fois(app_maquis):
+    """Un article créé avec 50 bouteilles en a 50, pas 100.
+
+    Le stock était posé à l'insertion *et* par le mouvement « Stock initial »
+    qui suit : il doublait, et le journal ne collait plus au stock affiché.
+    """
+    from backend import ecritures, lectures
+
+    _cadrer()
+    cree = ecritures.creer_article(
+        nom="Bière témoin",
+        id_categorie=None,
+        prix=1000,
+        cout_revient=500,
+        gere_stock=1,
+        stock=50,
+        seuil_alerte=5,
+        disponible=1,
+        image=None,
+        id_utilisateur=1,
+    )
+    assert cree["success"] is True
+
+    article = lectures.article_par_id(cree["id_article"])
+    assert article["stock"] == 50
+
+    mouvements = [
+        mouvement
+        for mouvement in lectures.derniers_mouvements()
+        if mouvement["reference"] == cree["reference"]
+    ]
+    assert [m["type_mouvement"] for m in mouvements] == ["Entrée"]
+    assert mouvements[0]["quantite"] == 50
+    assert mouvements[0]["stock_apres"] == 50
+
+
+def test_une_commande_ne_peut_pas_occuper_la_table_du_voisin(app_maquis):
+    """Le numéro de table vient du formulaire : un identifiant deviné doit échouer."""
+    from backend import ecritures, etablissement, lectures
+    from backend.database import lire_un
+
+    maison = _cadrer()
+    voisin = _peupler_voisin()
+    etablissement.definir(maison)
+
+    article = lectures.articles_disponibles()[0]
+    refus = ecritures.creer_commande(
+        id_utilisateur=1,
+        id_table=voisin["id_table"],
+        type_service="Sur place",
+        nom_client="Intrus",
+        telephone_client=None,
+        couverts=1,
+        remise=0,
+        commentaire=None,
+        articles=[{"id_article": article["id"], "quantite": 1}],
+    )
+    assert refus["success"] is False
+    assert "n'existe pas ici" in refus["error"]
+    assert (
+        lire_un("SELECT statut FROM tables_salle WHERE id = %s", (voisin["id_table"],))[
+            "statut"
+        ]
+        == "Libre"
+    )

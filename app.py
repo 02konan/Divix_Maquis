@@ -18,7 +18,7 @@ from flask_cors import CORS
 from flask_login import LoginManager, current_user
 from werkzeug.utils import secure_filename
 
-from backend import ecritures, lectures, modules, roles
+from backend import ecritures, etablissement, lectures, modules, roles
 from backend.auth import authentifier, utilisateur_par_id
 from backend.database import initialiser_base
 from backend.models import User
@@ -53,6 +53,12 @@ def charger_utilisateur(id_utilisateur):
 
 @app.before_request
 def restreindre_acces():
+    # Posé pour toute requête, y compris publique : le contexte est porté par le
+    # thread, qui en sert plusieurs à la suite. Sans cette remise à jour
+    # systématique, une requête anonyme hériterait de l'établissement du visiteur
+    # précédent.
+    etablissement.definir(session.get("id_etablissement"))
+
     if request.endpoint is None or request.endpoint in ROUTES_PUBLIQUES:
         return None
 
@@ -112,10 +118,16 @@ def injecter_contexte():
 
 
 def session_valide():
-    """L'utilisateur de la session existe-t-il toujours ?"""
+    """L'utilisateur de la session a-t-il toujours le droit d'être là ?
+
+    Revérifie aussi ce que la connexion avait vérifié : un établissement
+    suspendu ou une fonctionnalité « Serveurs » coupée depuis doivent finir par
+    fermer la porte, pas seulement aux prochains à se connecter.
+    """
     if time.time() - session.get("verifie_le", 0) < DELAI_VERIFICATION_SESSION:
         return True
-    if utilisateur_par_id(session.get("user_id")) is None:
+    utilisateur = utilisateur_par_id(session.get("user_id"))
+    if utilisateur is None or refuser_connexion(utilisateur):
         return False
     session["verifie_le"] = time.time()
     return True
@@ -161,6 +173,71 @@ def nombre(valeur_brute, defaut=0):
 # ============================== AUTHENTIFICATION ==============================
 
 
+def refuser_connexion(utilisateur):
+    """Motif de refus après un mot de passe pourtant juste, ou None.
+
+    L'établissement du compte est posé dans le contexte au passage : la requête
+    de connexion est anonyme, donc `before_request` n'y a rien mis, et la suite
+    — état des fonctionnalités, page d'accueil — en a besoin.
+    """
+    etablissement.definir(utilisateur["id_etablissement"])
+
+    if not utilisateur["etablissement_actif"]:
+        return "Cet établissement est suspendu. Contactez l'éditeur du logiciel."
+    if utilisateur["nom_role"] in roles.ROLES_SERVEUR and not modules.actif("serveur"):
+        return (
+            "Cet établissement ne fonctionne pas avec des serveurs connectés. "
+            "Voyez avec votre gérant."
+        )
+    return None
+
+
+@app.route("/inscription", methods=["GET", "POST"])
+def inscription():
+    """Ouvre un établissement et son compte gérant, en une fois."""
+    if request.method == "GET":
+        if session.get("connecte"):
+            return redirect(page_accueil(session.get("user_role")))
+        return render_template("inscription.html")
+
+    nom_etablissement = (request.form.get("etablissement") or "").strip()
+    nom = (request.form.get("nom") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    mot_de_passe = request.form.get("mot_de_passe") or ""
+
+    if not nom_etablissement or not nom or not email or not mot_de_passe:
+        return jsonify(
+            {"success": False, "error": "Tous les champs sont obligatoires"}
+        ), 400
+
+    resultat = etablissement.creer(
+        nom_etablissement,
+        request.form.get("ville"),
+        request.form.get("telephone"),
+    )
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+
+    # Le gérant est créé dans son établissement, donc dans son contexte.
+    etablissement.definir(resultat["id_etablissement"])
+    id_role = next(
+        role["id"] for role in lectures.liste_roles() if role["nom"] == "Gérant"
+    )
+    compte = ecritures.creer_compte(nom, email, mot_de_passe, id_role)
+    if not compte["success"]:
+        # L'établissement resterait sans personne pour y entrer.
+        etablissement.basculer(resultat["id_etablissement"], False)
+        return jsonify(compte), 400
+
+    return jsonify(
+        {
+            "success": True,
+            "message": "Établissement créé ! Connectez-vous pour commencer.",
+            "redirect": url_for("login"),
+        }
+    )
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -179,11 +256,17 @@ def login():
                 {"success": False, "error": "Email ou mot de passe incorrect"}
             ), 401
 
+        refus = refuser_connexion(utilisateur)
+        if refus:
+            return jsonify({"success": False, "error": refus}), 403
+
         session["connecte"] = True
         session["user_id"] = utilisateur["id"]
         session["user_name"] = utilisateur["nom"]
         session["user_email"] = utilisateur["email"]
         session["user_role"] = utilisateur["nom_role"]
+        session["id_etablissement"] = utilisateur["id_etablissement"]
+        session["nom_etablissement"] = utilisateur["nom_etablissement"]
         session["verifie_le"] = time.time()
         session.permanent = True
         app.permanent_session_lifetime = (
@@ -733,7 +816,7 @@ def administration():
         active_page="administration",
         modules=modules.liste(),
         utilisateurs=lectures.liste_utilisateurs(),
-        roles_disponibles=lectures.liste_roles(),
+        roles_disponibles=lectures.liste_roles(modules.actif("serveur")),
         id_courant=utilisateur_courant(),
     )
 
@@ -791,6 +874,55 @@ def administration_utilisateur_motdepasse(id_utilisateur):
     if not resultat["success"]:
         return jsonify(resultat), 400
     return jsonify({**resultat, "message": "Mot de passe réinitialisé"})
+
+
+# ================================= PLATEFORME =================================
+# Réservée à l'éditeur : elle voit tous les établissements de la base, là où
+# chaque gérant ne voit jamais que le sien.
+
+
+@app.route("/plateforme")
+def plateforme():
+    return render_template("plateforme.html", active_page="plateforme")
+
+
+@app.route("/plateforme/list")
+def plateforme_list():
+    etablissements = etablissement.liste()
+    return jsonify(
+        {
+            "data": etablissements,
+            "counter": {
+                "total_etablissements": len(etablissements),
+                "etablissements_actifs": sum(
+                    1 for ligne in etablissements if ligne["actif"]
+                ),
+                "comptes_total": sum(ligne["comptes"] for ligne in etablissements),
+            },
+        }
+    )
+
+
+@app.route("/plateforme/add", methods=["POST"])
+def plateforme_add():
+    resultat = etablissement.creer(
+        request.form.get("nom"),
+        request.form.get("ville"),
+        request.form.get("telephone"),
+    )
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+    return jsonify({**resultat, "message": "Établissement créé"})
+
+
+@app.route("/plateforme/<int:id_etablissement>/actif", methods=["POST"])
+def plateforme_actif(id_etablissement):
+    actif = request.form.get("actif") == "1"
+    resultat = etablissement.basculer(id_etablissement, actif)
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+    message = "Établissement rouvert" if actif else "Établissement suspendu"
+    return jsonify({**resultat, "message": message})
 
 
 if __name__ == "__main__":

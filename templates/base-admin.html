@@ -2,6 +2,9 @@
     <div class="container-fluid box-main p-0">
         <nav class="navbar navbar-expand-lg navbar-custom">
             <h4>{% block subtitle %}{% endblock %}</h4>
+            {% if session.get('nom_etablissement') %}
+            <span class="badge badge-pending ms-2 align-self-center">{{ session.get('nom_etablissement') }}</span>
+            {% endif %}
             <button class="btn ms-auto d-none hamburger" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasExample" aria-controls="offcanvasExample">
                 <i class="bx bx-menu-wider"></i>
             </button>

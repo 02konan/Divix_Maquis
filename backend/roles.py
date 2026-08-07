@@ -16,18 +16,33 @@ PAGES = [
     {"cle": "caisse", "url": "/caisse", "libelle": "Caisse", "icone": "bx bx-currency-notes"},
     {"cle": "depense", "url": "/depense", "libelle": "Dépenses", "icone": "bxf bx-wallet"},
     {"cle": "administration", "url": "/administration", "libelle": "Administration", "icone": "bxf bx-cog"},
+    {"cle": "plateforme", "url": "/plateforme", "libelle": "Établissements", "icone": "bxf bx-buildings"},
 ]
 
 TOUTES_LES_PAGES = {page["cle"] for page in PAGES}
 
+# La console plateforme voit tous les établissements : elle est hors du logiciel
+# que loue chaque maquis, et le gérant n'y a donc pas accès.
+PAGES_ETABLISSEMENT = TOUTES_LES_PAGES - {"plateforme"}
+
 PAGES_PAR_ROLE = {
+    "Administrateur plateforme": {"plateforme"},
     # Seul le gérant administre les fonctionnalités et les comptes.
-    "Gérant": TOUTES_LES_PAGES,
+    "Gérant": PAGES_ETABLISSEMENT,
     "Caissier": {"salle", "commande", "caisse"},
     "Serveur": {"salle", "commande", "maquis", "menu"},
     "Serveur bar": {"salle", "commande", "maquis"},
     "Serveur restaurant": {"salle", "commande", "menu"},
 }
+
+# Rôles qui n'existent que si l'établissement travaille avec des serveurs
+# connectés. La fonctionnalité « serveur » désactivée, ils ne sont plus
+# attribuables et leurs comptes sont refusés à la connexion.
+ROLES_SERVEUR = {"Serveur", "Serveur bar", "Serveur restaurant"}
+
+# Rôle réservé à l'éditeur : il n'appartient à aucun établissement et n'est
+# jamais proposé dans la gestion des comptes d'un maquis.
+ROLE_PLATEFORME = "Administrateur plateforme"
 
 # La carte est coupée en deux pages : le maquis sert la boisson, le menu la
 # nourriture. Le partage suit le type des catégories, déjà porté par la base.
@@ -97,6 +112,10 @@ PAGE_PAR_ENDPOINT = {
     "administration_utilisateur_actif": "administration",
     "administration_utilisateur_role": "administration",
     "administration_utilisateur_motdepasse": "administration",
+    "plateforme": "plateforme",
+    "plateforme_list": "plateforme",
+    "plateforme_add": "plateforme",
+    "plateforme_actif": "plateforme",
 }
 
 # Écritures qui relèvent de la gestion de l'établissement, pas du service :
@@ -104,7 +123,7 @@ PAGE_PAR_ENDPOINT = {
 ENDPOINTS_GESTION = {"salle_add"}
 ROLES_GESTION = {"Gérant"}
 
-ENDPOINTS_PUBLICS = {"login", "static"}
+ENDPOINTS_PUBLICS = {"login", "inscription", "static"}
 ENDPOINTS_TOUJOURS_AUTORISES = {"logout"}
 
 # Endpoints qui rendent une page : un refus s'y traduit par une redirection
@@ -126,6 +145,16 @@ def initialiser():
             [(nom,) for nom in PAGES_PAR_ROLE],
         )
         conn.commit()
+
+
+def roles_attribuables(serveurs_actifs=True):
+    """Rôles qu'un gérant peut donner à ses employés.
+
+    Le rôle plateforme n'en fait jamais partie, et les rôles serveur
+    disparaissent là où l'établissement travaille sans serveur connecté.
+    """
+    exclus = {ROLE_PLATEFORME} | (set() if serveurs_actifs else ROLES_SERVEUR)
+    return [nom for nom in PAGES_PAR_ROLE if nom not in exclus]
 
 
 def domaines(role):

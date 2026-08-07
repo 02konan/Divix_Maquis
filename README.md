@@ -46,9 +46,60 @@ Comptes de démonstration :
 | Serveur  | `serveur@divixmaquis.ci`   | `serveur123` |
 | Serveur bar | `bar@divixmaquis.ci`    | `bar123`     |
 | Serveur restaurant | `resto@divixmaquis.ci` | `resto123` |
+| Administrateur plateforme | `plateforme@divix.ci` | `plateforme123` |
 
 > Changez ces mots de passe avant toute mise en production, et définissez `SECRET_KEY`
 > dans le fichier `.env`.
+
+## Plusieurs établissements dans la même base
+
+Une installation héberge autant de maquis que nécessaire. Chaque table métier porte
+un `id_etablissement`, et **toutes** les requêtes filtrent dessus : deux
+établissements ont chacun leur carte, leur salle, leur caisse et leur personnel sans
+jamais se voir. Les numéros repartent de 1 chez chacun — deux maquis ont chacun leur
+table « 1 » et leur `CMD-0001`.
+
+L'identifiant n'est pas passé en paramètre aux cinquante fonctions de lecture et
+d'écriture, où un oubli ferait fuiter des données : il est posé une fois par requête
+dans une variable de contexte (`backend/etablissement.py`) que chaque requête SQL
+relit. `courant()` lève plutôt que de renvoyer `None`, pour qu'une lecture non
+rattachée échoue au lieu de tout montrer.
+
+Deux tests gardent ce cloisonnement, et parcourent **toutes** les fonctions publiques
+de `backend/lectures.py` plutôt qu'un échantillon : l'un remplit un second maquis dont
+chaque ligne porte un mot reconnaissable et vérifie qu'aucune lecture ne le laisse
+passer, l'autre compare tous les compteurs avant et après pour attraper les fuites
+chiffrées, qu'un nom ne trahirait pas.
+
+### Comment un établissement entre dans la base
+
+- **Inscription** — la page de connexion mène à `/inscription` : nom de
+  l'établissement, nom du gérant, email, mot de passe. L'établissement démarre avec
+  toutes ses fonctionnalités et son compte gérant. Si la création du compte échoue,
+  l'établissement est suspendu dans la foulée : il n'en reste pas un vide où personne
+  ne peut entrer.
+- **Console plateforme** — le rôle **Administrateur plateforme** dispose de la page
+  `/plateforme` : tous les établissements, leur nombre de comptes, de commandes et
+  leur encaissé, avec de quoi en créer et en suspendre. Ce compte n'appartient à
+  aucun maquis, donc aucune page de service ne s'ouvre pour lui — et le rôle n'est
+  jamais proposé dans la gestion des comptes d'un établissement.
+
+Suspendre un établissement ferme la connexion à tout son personnel, message à
+l'appui, sans rien supprimer : le rouvrir rend l'accès tel quel.
+
+### Migration d'une base existante
+
+Une installation d'avant le multi-établissement se convertit toute seule au démarrage
+suivant : création d'un établissement « Mon établissement », ajout de la colonne à
+chaque table, rattachement des lignes existantes, puis élargissement des contraintes
+d'unicité (`numero`, `reference`, `cle` de module, `prefixe` de compteur) qui portaient
+sur toute la base et ne valent plus que par établissement. Rien n'est perdu — ni les
+commandes, ni les compteurs de références, ni l'état des fonctionnalités. La migration
+se teste avant de s'exécuter, donc elle ne fait rien sur une base déjà à jour, et deux
+sondages suffisent à le savoir au démarrage.
+
+L'email reste unique sur toute la base : c'est l'identifiant de connexion, et c'est
+lui qui désigne l'établissement.
 
 ## Fonctionnalités activables
 
@@ -58,11 +109,19 @@ désactive chaque fonctionnalité :
 
 | Fonctionnalité | Désactivable |
 |----------------|--------------|
-| Tableau de bord, Gestion de salle, Maquis, Stock, Dépenses | oui |
+| Tableau de bord, Gestion de salle, Maquis, Serveurs, Stock, Dépenses | oui |
 | Commandes, Menu, Caisse | non — cœur du logiciel |
 
 La page **Maquis** est désactivable parce qu'un restaurant qui ne sert pas de boisson
 n'en a pas l'usage ; la carte du restaurant, elle, reste toujours là.
+
+**Serveurs** n'est pas une page mais une manière de travailler : certains
+établissements n'ont pas de serveur avec un compte, c'est le caissier qui saisit tout.
+La fonctionnalité coupée, les trois rôles serveur disparaissent de la gestion des
+comptes et les comptes existants sont refusés à la connexion, avec le motif affiché.
+Rien n'est supprimé : ni les comptes, ni les commandes qui leur sont attribuées, et
+réactiver la fonctionnalité leur rend l'accès tel quel. Une session déjà ouverte se
+ferme à la prochaine revérification, qui a lieu au plus toutes les cinq minutes.
 
 Une fonctionnalité désactivée disparaît du menu **et** ses URL sont fermées (`403`
 sur les appels de données), pour tout le monde, gérant compris. Les données déjà
@@ -87,6 +146,8 @@ donc un basculement peut mettre ce délai à se propager aux autres workers guni
 | **Serveur**  | — | ✓ | ✓ | lecture | lecture | — | — | — |
 | **Serveur bar** | — | ✓ | ✓ | lecture | — | — | — | — |
 | **Serveur restaurant** | — | ✓ | ✓ | — | lecture | — | — | — |
+| **Administrateur plateforme** | — | — | — | — | — | — | — | — |
+| | *(la seule page Établissements, dans aucun maquis)* | | | | | | | |
 
 « lecture » veut dire la page sans ses boutons d'action : un serveur consulte la carte
 et met les articles au panier, mais ne crée, ne modifie ni ne retire rien. Le masquage
@@ -135,6 +196,7 @@ connexion sur sa première page autorisée. Un rôle absent du tableau n'a accè
 | **Stock**     | Stock des boissons, seuils d'alerte, entrées/sorties/pertes/inventaires |
 | **Caisse**    | Encaissements totaux ou partiels, répartition par mode de paiement, journal de caisse |
 | **Dépenses**  | Approvisionnements, salaires, loyer, charges |
+| **Plateforme** | Réservée à l'éditeur : tous les établissements hébergés, création et suspension |
 
 ### Les deux cartes
 
@@ -177,7 +239,8 @@ divix_maquis/
 ├── app.py                  routes Flask uniquement (validation + JSON)
 ├── backend/
 │   ├── schema.sql          schéma MySQL
-│   ├── database.py         connexion et helpers de requête
+│   ├── database.py         connexion, helpers de requête, migration du schéma
+│   ├── etablissement.py    établissement courant + console plateforme
 │   ├── auth.py             authentification (mots de passe hachés)
 │   ├── models.py           utilisateur Flask-Login
 │   ├── lectures.py         toutes les lectures (listes, compteurs, dashboard)
@@ -191,24 +254,36 @@ divix_maquis/
 └── static/vendor/          Bootstrap, SweetAlert2, Chart.js, Outfit, Boxicons
 ```
 
-Deux règles structurent le backend :
+Trois règles structurent le backend :
 
 - **Les prix ne viennent jamais du formulaire.** `creer_commande` relit le prix de chaque
   article en base avant de calculer le total, ce qui évite qu'un client modifie le montant.
 - **Le stock et la salle suivent la commande.** Une commande décrémente le stock des
   boissons et occupe la table ; un ticket soldé ou annulé libère la table automatiquement.
+- **Le stock ne change que par un mouvement.** Un article est créé à zéro, et la quantité
+  déclarée à la création arrive par un mouvement « Stock initial ». Le journal et le stock
+  affiché racontent ainsi toujours la même histoire.
+
+Tout identifiant venu d'un formulaire — table, catégorie, article — est revérifié dans
+l'établissement courant avant d'être écrit. Le cadrage des requêtes protège de ce qu'on
+lit ; il ne dit rien de ce qu'on désigne.
 
 ## Modèle de données
 
-`roles`, `utilisateurs`, `tables_salle`, `categories`, `articles`, `commandes`,
-`lignes_commande`, `paiements`, `mouvements_stock`, `depenses`, `compteurs`,
-`modules`.
+`etablissements`, `roles`, `utilisateurs`, `tables_salle`, `categories`, `articles`,
+`commandes`, `lignes_commande`, `paiements`, `mouvements_stock`, `depenses`,
+`compteurs`, `modules`.
 
-`compteurs` porte la numérotation des références (`CMD-0001`, `PAI-0002`, ...) :
-le numéro est attribué sous verrou, sinon deux commandes prises au même instant
-reçoivent la même référence et l'une des deux est refusée. Pour la même raison,
-la lecture du stock d'un article et celle du reste à payer d'un ticket se font
-en `SELECT ... FOR UPDATE`.
+Toutes portent un `id_etablissement` sauf trois : `etablissements` elle-même,
+`roles` qui est commune à la plateforme, et `lignes_commande` — une ligne appartient
+à sa commande, qui porte déjà l'établissement, et aucune lecture ne l'atteint sans
+passer par elle.
+
+`compteurs` porte la numérotation des références (`CMD-0001`, `PAI-0002`, ...),
+**par établissement** : le numéro est attribué sous verrou, sinon deux commandes
+prises au même instant reçoivent la même référence et l'une des deux est refusée.
+Pour la même raison, la lecture du stock d'un article et celle du reste à payer d'un
+ticket se font en `SELECT ... FOR UPDATE`.
 
 Un article porte un indicateur `gere_stock` : les boissons sont décomptées à la vente,
 les plats sont préparés à la commande et ne consomment pas de stock.

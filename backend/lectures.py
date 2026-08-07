@@ -1,8 +1,15 @@
-"""Toutes les lectures : listes affichées dans l'interface et indicateurs du dashboard."""
+"""Toutes les lectures : listes affichées dans l'interface et indicateurs du dashboard.
+
+Chaque requête est cadrée sur l'établissement courant (`etablissement.courant()`),
+posé une fois par requête HTTP. Une lecture qui oublierait ce filtre montrerait
+les données d'un maquis à un autre : `tests/test_app.py` parcourt pour cela
+toutes les fonctions publiques de ce module avec deux établissements peuplés.
+"""
 
 from datetime import date, timedelta
 
 from backend.database import lire_tout, lire_un
+from backend.etablissement import courant
 
 
 def _restriction(domaines, alias="c"):
@@ -30,8 +37,10 @@ def liste_tables():
         FROM tables_salle t
         LEFT JOIN commandes c
                ON c.id_table = t.id AND c.statut IN ('En cours', 'Servie')
+        WHERE t.id_etablissement = %s
         ORDER BY t.zone, CAST(t.numero AS UNSIGNED), t.numero
-        """
+        """,
+        (courant(),),
     )
 
 
@@ -42,12 +51,17 @@ def compteurs_salle():
                COALESCE(SUM(statut = 'Occupée'), 0) AS tables_occupees,
                COALESCE(SUM(statut = 'Libre'), 0) AS tables_libres
         FROM tables_salle
-        """
+        WHERE id_etablissement = %s
+        """,
+        (courant(),),
     )
 
 
 def table_par_id(id_table):
-    return lire_un("SELECT * FROM tables_salle WHERE id = %s", (id_table,))
+    return lire_un(
+        "SELECT * FROM tables_salle WHERE id = %s AND id_etablissement = %s",
+        (id_table, courant()),
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -58,9 +72,10 @@ def table_par_id(id_table):
 def liste_categories(domaines=None):
     condition, params = _restriction(domaines, alias="categories")
     return lire_tout(
-        f"SELECT id, nom, type FROM categories WHERE 1 = 1{condition}"
-        " ORDER BY type, nom",
-        params,
+        f"""SELECT id, nom, type FROM categories
+            WHERE id_etablissement = %s{condition}
+            ORDER BY type, nom""",
+        (courant(), *params),
     )
 
 
@@ -74,10 +89,10 @@ def liste_articles(domaines=None):
                COALESCE(c.type, 'Cuisine') AS type_categorie
         FROM articles a
         LEFT JOIN categories c ON a.id_categorie = c.id
-        WHERE 1 = 1{condition}
+        WHERE a.id_etablissement = %s{condition}
         ORDER BY a.date_creation DESC, a.id DESC
         """,
-        params,
+        (courant(), *params),
     )
 
 
@@ -90,10 +105,11 @@ def articles_disponibles(domaines=None):
                COALESCE(c.nom, 'Sans catégorie') AS categorie
         FROM articles a
         LEFT JOIN categories c ON a.id_categorie = c.id
-        WHERE a.disponible = 1 AND (a.gere_stock = 0 OR a.stock > 0){condition}
+        WHERE a.id_etablissement = %s
+          AND a.disponible = 1 AND (a.gere_stock = 0 OR a.stock > 0){condition}
         ORDER BY c.nom, a.nom
         """,
-        params,
+        (courant(), *params),
     )
 
 
@@ -108,9 +124,9 @@ def compteurs_menu(domaines=None):
                             AND a.stock <= a.seuil_alerte), 0) AS stock_faible
         FROM articles a
         LEFT JOIN categories c ON a.id_categorie = c.id
-        WHERE 1 = 1{condition}
+        WHERE a.id_etablissement = %s{condition}
         """,
-        params,
+        (courant(), *params),
     )
 
 
@@ -121,9 +137,9 @@ def article_par_id(id_article, domaines=None):
         SELECT a.*, COALESCE(c.type, 'Cuisine') AS type_categorie
         FROM articles a
         LEFT JOIN categories c ON a.id_categorie = c.id
-        WHERE a.id = %s{condition}
+        WHERE a.id = %s AND a.id_etablissement = %s{condition}
         """,
-        (id_article, *params),
+        (id_article, courant(), *params),
     )
 
 
@@ -131,8 +147,9 @@ def categorie_du_domaine(id_categorie, domaines=None):
     """Vérifie qu'une catégorie appartient bien au domaine de la page."""
     condition, params = _restriction(domaines, alias="categories")
     return lire_un(
-        f"SELECT id FROM categories WHERE id = %s{condition}",
-        (id_categorie, *params),
+        f"""SELECT id FROM categories
+            WHERE id = %s AND id_etablissement = %s{condition}""",
+        (id_categorie, courant(), *params),
     )
 
 
@@ -159,9 +176,10 @@ def liste_stock():
                a.cout_revient, COALESCE(c.nom, 'Sans catégorie') AS categorie
         FROM articles a
         LEFT JOIN categories c ON a.id_categorie = c.id
-        WHERE a.gere_stock = 1
+        WHERE a.id_etablissement = %s AND a.gere_stock = 1
         ORDER BY a.stock ASC, a.nom
-        """
+        """,
+        (courant(),),
     )
     for article in articles:
         article["gere_stock"] = 1
@@ -177,8 +195,9 @@ def compteurs_stock():
                COALESCE(SUM(stock <= 0), 0) AS ruptures,
                COALESCE(SUM(stock * cout_revient), 0) AS valeur_stock
         FROM articles
-        WHERE gere_stock = 1
-        """
+        WHERE id_etablissement = %s AND gere_stock = 1
+        """,
+        (courant(),),
     )
     compteurs["valeur_stock"] = round(compteurs["valeur_stock"], 2)
     return compteurs
@@ -193,10 +212,11 @@ def derniers_mouvements(limite=50):
         FROM mouvements_stock m
         JOIN articles a ON m.id_article = a.id
         LEFT JOIN utilisateurs u ON m.id_utilisateur = u.id
+        WHERE m.id_etablissement = %s
         ORDER BY m.date_mouvement DESC, m.id DESC
         LIMIT %s
         """,
-        (limite,),
+        (courant(), limite),
     )
 
 
@@ -234,11 +254,11 @@ def liste_commandes(limite=200, domaines=None):
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON c.id_utilisateur = u.id
-        WHERE 1 = 1{condition}
+        WHERE c.id_etablissement = %s{condition}
         ORDER BY c.id DESC
         LIMIT %s
         """,
-        (*params, limite),
+        (courant(), *params, limite),
     )
     resumes = resumes_articles([commande["id"] for commande in commandes])
     for commande in commandes:
@@ -260,10 +280,11 @@ def resumes_articles(ids_commande):
         SELECT l.id_commande, a.nom, l.quantite
         FROM lignes_commande l
         JOIN articles a ON l.id_article = a.id
-        WHERE l.id_commande IN ({marqueurs})
+        JOIN commandes c ON l.id_commande = c.id
+        WHERE c.id_etablissement = %s AND l.id_commande IN ({marqueurs})
         ORDER BY l.id
         """,
-        tuple(ids_commande),
+        (courant(), *ids_commande),
     )
 
     resumes = {}
@@ -287,9 +308,9 @@ def detail_commande(reference, domaines=None):
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON c.id_utilisateur = u.id
-        WHERE c.reference = %s{condition}
+        WHERE c.reference = %s AND c.id_etablissement = %s{condition}
         """,
-        (reference, *params),
+        (reference, courant(), *params),
     )
     if not commande:
         return None
@@ -320,21 +341,25 @@ def detail_commande(reference, domaines=None):
 
 def compteurs_commandes(domaines=None):
     condition, params = _commande_du_domaine(domaines)
+    id_etablissement = courant()
     compteurs = lire_un(
         f"""
         SELECT
           (SELECT COUNT(*) FROM commandes c
-            WHERE c.date_commande >= CURDATE()
+            WHERE c.id_etablissement = %s
+              AND c.date_commande >= CURDATE()
               AND c.date_commande < CURDATE() + INTERVAL 1 DAY{condition}) AS commandes_jour,
           (SELECT COUNT(*) FROM commandes c
-            WHERE c.statut IN ('En cours', 'Servie'){condition}) AS commandes_en_cours,
+            WHERE c.id_etablissement = %s
+              AND c.statut IN ('En cours', 'Servie'){condition}) AS commandes_en_cours,
           (SELECT COALESCE(SUM(c.montant_total - COALESCE(
                     (SELECT SUM(p.montant) FROM paiements p
                       WHERE p.id_commande = c.id), 0)), 0)
              FROM commandes c
-            WHERE c.statut IN ('En cours', 'Servie'){condition}) AS montant_impaye
+            WHERE c.id_etablissement = %s
+              AND c.statut IN ('En cours', 'Servie'){condition}) AS montant_impaye
         """,
-        params * 3,
+        (id_etablissement, *params) * 3,
     )
     compteurs["montant_impaye"] = round(compteurs["montant_impaye"], 2)
     return compteurs
@@ -356,25 +381,31 @@ def liste_paiements(limite=200):
         JOIN commandes c ON p.id_commande = c.id
         LEFT JOIN tables_salle t ON c.id_table = t.id
         LEFT JOIN utilisateurs u ON p.id_utilisateur = u.id
+        WHERE p.id_etablissement = %s
         ORDER BY p.id DESC
         LIMIT %s
         """,
-        (limite,),
+        (courant(), limite),
     )
 
 
 def compteurs_caisse():
+    id_etablissement = courant()
     compteurs = lire_un(
         """
         SELECT
           (SELECT COALESCE(SUM(montant), 0) FROM paiements
-            WHERE date_paiement >= CURDATE()
+            WHERE id_etablissement = %s
+              AND date_paiement >= CURDATE()
               AND date_paiement < CURDATE() + INTERVAL 1 DAY) AS encaisse_jour,
-          (SELECT COALESCE(SUM(montant), 0) FROM paiements) AS encaisse_total,
+          (SELECT COALESCE(SUM(montant), 0) FROM paiements
+            WHERE id_etablissement = %s) AS encaisse_total,
           (SELECT COUNT(*) FROM paiements
-            WHERE date_paiement >= CURDATE()
+            WHERE id_etablissement = %s
+              AND date_paiement >= CURDATE()
               AND date_paiement < CURDATE() + INTERVAL 1 DAY) AS nb_paiements_jour
-        """
+        """,
+        (id_etablissement, id_etablissement, id_etablissement),
     )
     compteurs["encaisse_jour"] = round(compteurs["encaisse_jour"], 2)
     compteurs["encaisse_total"] = round(compteurs["encaisse_total"], 2)
@@ -390,9 +421,10 @@ def commandes_a_encaisser():
                          WHERE p.id_commande = c.id), 0) AS total_paye
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
-        WHERE c.statut IN ('En cours', 'Servie')
+        WHERE c.id_etablissement = %s AND c.statut IN ('En cours', 'Servie')
         ORDER BY c.id DESC
-        """
+        """,
+        (courant(),),
     )
 
 
@@ -401,10 +433,11 @@ def repartition_modes_paiement():
         """
         SELECT mode, COUNT(*) AS nombre, SUM(montant) AS total
         FROM paiements
-        WHERE DATE(date_paiement) = CURDATE()
+        WHERE id_etablissement = %s AND DATE(date_paiement) = CURDATE()
         GROUP BY mode
         ORDER BY total DESC
-        """
+        """,
+        (courant(),),
     )
 
 
@@ -421,10 +454,11 @@ def liste_depenses(limite=200):
                COALESCE(u.nom, '—') AS utilisateur
         FROM depenses d
         LEFT JOIN utilisateurs u ON d.id_utilisateur = u.id
+        WHERE d.id_etablissement = %s
         ORDER BY d.date_depense DESC, d.id DESC
         LIMIT %s
         """,
-        (limite,),
+        (courant(), limite),
     )
 
 
@@ -439,8 +473,9 @@ def compteurs_depenses():
         FROM (SELECT montant, date_depense,
                      YEAR(date_depense) = YEAR(CURDATE())
                      AND MONTH(date_depense) = MONTH(CURDATE()) AS mois_courant
-              FROM depenses) d
-        """
+              FROM depenses WHERE id_etablissement = %s) d
+        """,
+        (courant(),),
     )
     compteurs["depenses_jour"] = round(compteurs["depenses_jour"], 2)
     compteurs["depenses_mois"] = round(compteurs["depenses_mois"], 2)
@@ -454,14 +489,18 @@ def compteurs_depenses():
 
 def indicateurs_jour():
     """Recette du jour, recette totale, ticket moyen et couverts, en une requête."""
+    id_etablissement = courant()
     paiements = lire_un(
         """
         SELECT
           (SELECT COALESCE(SUM(montant), 0) FROM paiements
-            WHERE date_paiement >= CURDATE()
+            WHERE id_etablissement = %s
+              AND date_paiement >= CURDATE()
               AND date_paiement < CURDATE() + INTERVAL 1 DAY) AS ca_jour,
-          (SELECT COALESCE(SUM(montant), 0) FROM paiements) AS ca_total
-        """
+          (SELECT COALESCE(SUM(montant), 0) FROM paiements
+            WHERE id_etablissement = %s) AS ca_total
+        """,
+        (id_etablissement, id_etablissement),
     )
     commandes = lire_un(
         """
@@ -469,10 +508,12 @@ def indicateurs_jour():
                COUNT(*) AS nombre_jour,
                COALESCE(SUM(couverts), 0) AS couverts_jour
         FROM commandes
-        WHERE date_commande >= CURDATE()
+        WHERE id_etablissement = %s
+          AND date_commande >= CURDATE()
           AND date_commande < CURDATE() + INTERVAL 1 DAY
           AND statut != 'Annulée'
-        """
+        """,
+        (id_etablissement,),
     )
     nombre = commandes["nombre_jour"]
     return {
@@ -486,14 +527,15 @@ def indicateurs_jour():
 def ca_par_jour(nb_jours=7):
     """Chiffre d'affaires et nombre de commandes des N derniers jours, trous compris."""
     debut = date.today() - timedelta(days=nb_jours - 1)
+    id_etablissement = courant()
     lignes = lire_tout(
         """
         SELECT DATE(date_paiement) AS jour, SUM(montant) AS revenu
         FROM paiements
-        WHERE DATE(date_paiement) >= %s
+        WHERE id_etablissement = %s AND DATE(date_paiement) >= %s
         GROUP BY jour
         """,
-        (debut.isoformat(),),
+        (id_etablissement, debut.isoformat()),
     )
     revenus = {ligne["jour"]: ligne["revenu"] for ligne in lignes}
 
@@ -501,10 +543,11 @@ def ca_par_jour(nb_jours=7):
         """
         SELECT DATE(date_commande) AS jour, COUNT(*) AS nombre
         FROM commandes
-        WHERE DATE(date_commande) >= %s AND statut != 'Annulée'
+        WHERE id_etablissement = %s AND DATE(date_commande) >= %s
+          AND statut != 'Annulée'
         GROUP BY jour
         """,
-        (debut.isoformat(),),
+        (id_etablissement, debut.isoformat()),
     )
     nombres = {ligne["jour"]: ligne["nombre"] for ligne in lignes_commandes}
 
@@ -529,13 +572,14 @@ def top_articles(limite=5, nb_jours=30):
         FROM lignes_commande l
         JOIN articles a ON l.id_article = a.id
         JOIN commandes c ON l.id_commande = c.id
-        WHERE c.statut != 'Annulée'
+        WHERE c.id_etablissement = %s
+          AND c.statut != 'Annulée'
           AND DATE(c.date_commande) >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
         GROUP BY a.id, a.nom
         ORDER BY quantite DESC
         LIMIT %s
         """,
-        (nb_jours, limite),
+        (courant(), nb_jours, limite),
     )
 
 
@@ -547,10 +591,11 @@ def dernieres_commandes(limite=5):
                COALESCE(t.numero, '—') AS table_numero
         FROM commandes c
         LEFT JOIN tables_salle t ON c.id_table = t.id
+        WHERE c.id_etablissement = %s
         ORDER BY c.id DESC
         LIMIT %s
         """,
-        (limite,),
+        (courant(), limite),
     )
 
 
@@ -565,8 +610,9 @@ def _sommes_deux_mois(table, colonne_date, colonne_montant, bornes):
                                   AND DATE({colonne_date}) < %s
                                  THEN {colonne_montant} ELSE 0 END), 0) AS precedent
         FROM {table}
+        WHERE id_etablissement = %s
         """,
-        bornes,
+        (*bornes, courant()),
     )
 
 
@@ -603,19 +649,19 @@ def evolution_nombre(table, colonne_date, condition="1 = 1"):
                COALESCE(SUM(DATE({colonne_date}) >= %s
                             AND DATE({colonne_date}) < %s), 0) AS precedent
         FROM {table}
-        WHERE {condition}
+        WHERE id_etablissement = %s AND {condition}
         """,
-        _bornes_deux_mois(),
+        (*_bornes_deux_mois(), courant()),
     )
     return calculer_pourcentage(sommes["courant"], sommes["precedent"])
 
 
-def calculer_pourcentage(courant, precedent):
-    courant = courant or 0
+def calculer_pourcentage(courant_, precedent):
+    courant_ = courant_ or 0
     precedent = precedent or 0
     if precedent == 0:
-        return 100 if courant > 0 else 0
-    return round(((courant - precedent) / precedent) * 100, 1)
+        return 100 if courant_ > 0 else 0
+    return round(((courant_ - precedent) / precedent) * 100, 1)
 
 
 # ----------------------------------------------------------------------------
@@ -630,10 +676,20 @@ def liste_utilisateurs():
                r.nom AS role
         FROM utilisateurs u
         JOIN roles r ON u.id_role = r.id
+        WHERE u.id_etablissement = %s
         ORDER BY r.id, u.nom
-        """
+        """,
+        (courant(),),
     )
 
 
-def liste_roles():
-    return lire_tout("SELECT id, nom FROM roles ORDER BY id")
+def liste_roles(serveurs_actifs=True):
+    """Rôles attribuables dans un établissement, dans l'ordre du menu."""
+    from backend import roles
+
+    attribuables = roles.roles_attribuables(serveurs_actifs)
+    marqueurs = ", ".join(["%s"] * len(attribuables))
+    return lire_tout(
+        f"SELECT id, nom FROM roles WHERE nom IN ({marqueurs}) ORDER BY id",
+        tuple(attribuables),
+    )

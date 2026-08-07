@@ -1,10 +1,25 @@
 
 import random
 from datetime import date, datetime, timedelta
+from backend import etablissement, modules
 from backend.auth import creer_utilisateur
 from backend.database import valeur,initialiser_base,connexion
+from backend.roles import ROLE_PLATEFORME
 
-ROLES = ["Gérant", "Caissier", "Serveur", "Serveur bar", "Serveur restaurant"]
+ROLES = [
+    "Gérant",
+    "Caissier",
+    "Serveur",
+    "Serveur bar",
+    "Serveur restaurant",
+    ROLE_PLATEFORME,
+]
+
+ETABLISSEMENT = ("Maquis Le Baoulé", "Abidjan", "+225 07 00 00 00 01")
+
+# Un second établissement, sans données, pour que la console plateforme montre
+# ce qu'elle sait faire : deux maquis dans la même base, chacun chez soi.
+ETABLISSEMENT_VOISIN = ("Chez Tantie Adjoua", "Bouaké", "+225 07 00 00 00 02")
 
 UTILISATEURS = [
     ("Konan Divix", "admin@divixmaquis.ci", "admin123", "Gérant"),
@@ -13,6 +28,9 @@ UTILISATEURS = [
     ("Ismaël Bar", "bar@divixmaquis.ci", "bar123", "Serveur bar"),
     ("Mariam Cuisine", "resto@divixmaquis.ci", "resto123", "Serveur restaurant"),
 ]
+
+# Le compte de l'éditeur : aucun établissement, donc aucune donnée de service.
+PLATEFORME = ("Support Divix", "plateforme@divix.ci", "plateforme123")
 
 CATEGORIES = [
     ("Grillades", "Cuisine"),
@@ -102,12 +120,21 @@ def peupler():
 
     with connexion() as conn:
         conn.executemany("INSERT INTO roles (nom) VALUES (%s)", [(r,) for r in ROLES])
+        conn.commit()
+
+    ets = etablissement.creer(*ETABLISSEMENT)["id_etablissement"]
+    voisin = etablissement.creer(*ETABLISSEMENT_VOISIN)["id_etablissement"]
+    etablissement.definir(ets)
+
+    with connexion() as conn:
         conn.executemany(
-            "INSERT INTO categories (nom, type) VALUES (%s, %s)", CATEGORIES
+            "INSERT INTO categories (id_etablissement, nom, type) VALUES (%s, %s, %s)",
+            [(ets, *categorie) for categorie in CATEGORIES],
         )
         conn.executemany(
-            "INSERT INTO tables_salle (numero, zone, places) VALUES (%s, %s, %s)",
-            TABLES,
+            """INSERT INTO tables_salle (id_etablissement, numero, zone, places)
+               VALUES (%s, %s, %s, %s)""",
+            [(ets, *table) for table in TABLES],
         )
         conn.commit()
 
@@ -118,23 +145,34 @@ def peupler():
         }
 
     for nom, email, mot_de_passe, role in UTILISATEURS:
-        creer_utilisateur(nom, email, mot_de_passe, roles_par_nom[role])
+        creer_utilisateur(nom, email, mot_de_passe, roles_par_nom[role], ets)
+    creer_utilisateur(*PLATEFORME, roles_par_nom[ROLE_PLATEFORME], None)
+    creer_utilisateur(
+        "Tantie Adjoua",
+        "adjoua@divixmaquis.ci",
+        "adjoua123",
+        roles_par_nom["Gérant"],
+        voisin,
+    )
 
     with connexion() as conn:
         categories = {
             ligne["nom"]: ligne["id"]
-            for ligne in conn.execute("SELECT id, nom FROM categories")
+            for ligne in conn.execute(
+                "SELECT id, nom FROM categories WHERE id_etablissement = %s", (ets,)
+            )
         }
 
         for index, (nom, categorie, prix, cout, gere_stock, stock, seuil) in enumerate(
             ARTICLES, start=1
         ):
             conn.execute(
-                """INSERT INTO articles (reference, nom, id_categorie, prix, cout_revient,
-                                         gere_stock, stock, seuil_alerte, disponible,
-                                         id_utilisateur)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, 1)""",
+                """INSERT INTO articles (id_etablissement, reference, nom, id_categorie,
+                                         prix, cout_revient, gere_stock, stock,
+                                         seuil_alerte, disponible, id_utilisateur)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1, 1)""",
                 (
+                    ets,
                     f"ART-{index:04d}",
                     nom,
                     categories[categorie],
@@ -150,20 +188,29 @@ def peupler():
         articles = [
             dict(ligne)
             for ligne in conn.execute(
-                "SELECT id, prix, gere_stock FROM articles"
+                "SELECT id, prix, gere_stock FROM articles WHERE id_etablissement = %s",
+                (ets,),
+            ).fetchall()
+        ]
+        tables = [
+            ligne["id"]
+            for ligne in conn.execute(
+                "SELECT id FROM tables_salle WHERE id_etablissement = %s", (ets,)
             ).fetchall()
         ]
 
-        _generer_historique(conn, articles)
-        _generer_mouvements(conn)
-        _generer_depenses(conn)
+        _generer_historique(conn, ets, articles, tables)
+        _generer_mouvements(conn, ets)
+        _generer_depenses(conn, ets)
         conn.commit()
 
+    modules.invalider_cache()
     print("Base de démonstration créée.")
     print("Connexion : admin@divixmaquis.ci / admin123")
+    print("Console plateforme : plateforme@divix.ci / plateforme123")
 
 
-def _generer_historique(conn, articles, nb_jours=21):
+def _generer_historique(conn, ets, articles, tables, nb_jours=21):
     """Crée des commandes et encaissements réalistes sur les trois dernières semaines."""
     random.seed(42)
     numero_commande = 0
@@ -181,17 +228,19 @@ def _generer_historique(conn, articles, nb_jours=21):
             horodatage = datetime.combine(jour, datetime.min.time()).replace(
                 hour=heure, minute=random.randint(0, 59)
             )
-            id_table = random.randint(1, len(TABLES))
+            id_table = random.choice(tables)
             couverts = random.randint(1, 6)
 
             lignes = random.sample(articles, random.randint(2, 5))
             montant_total = 0
             id_commande = conn.execute(
-                """INSERT INTO commandes (reference, id_table, type_service, nom_client,
-                                          couverts, statut, montant_total, id_utilisateur,
+                """INSERT INTO commandes (id_etablissement, reference, id_table,
+                                          type_service, nom_client, couverts, statut,
+                                          montant_total, id_utilisateur,
                                           date_commande, date_cloture)
-                   VALUES (%s, %s, 'Sur place', %s, %s, 'Payée', 0, %s, %s, %s)""",
+                   VALUES (%s, %s, %s, 'Sur place', %s, %s, 'Payée', 0, %s, %s, %s)""",
                 (
+                    ets,
                     reference,
                     id_table,
                     random.choice(PRENOMS),
@@ -220,10 +269,11 @@ def _generer_historique(conn, articles, nb_jours=21):
 
             numero_paiement += 1
             conn.execute(
-                """INSERT INTO paiements (reference, id_commande, montant, mode,
-                                          id_utilisateur, date_paiement)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                """INSERT INTO paiements (id_etablissement, reference, id_commande,
+                                          montant, mode, id_utilisateur, date_paiement)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                 (
+                    ets,
                     f"PAI-{numero_paiement:04d}",
                     id_commande,
                     montant_total,
@@ -234,16 +284,18 @@ def _generer_historique(conn, articles, nb_jours=21):
             )
 
     # Quelques tickets encore ouverts pour que la salle ne soit pas vide.
-    for index, id_table in enumerate([2, 5, 11], start=1):
+    for index, id_table in enumerate([tables[1], tables[4], tables[10]], start=1):
         numero_commande += 1
         reference = f"CMD-{numero_commande:04d}"
         lignes = random.sample(articles, 3)
         montant_total = 0
         id_commande = conn.execute(
-            """INSERT INTO commandes (reference, id_table, type_service, nom_client,
-                                      couverts, statut, montant_total, id_utilisateur)
-               VALUES (%s, %s, 'Sur place', %s, %s, %s, 0, 1)""",
+            """INSERT INTO commandes (id_etablissement, reference, id_table,
+                                      type_service, nom_client, couverts, statut,
+                                      montant_total, id_utilisateur)
+               VALUES (%s, %s, %s, 'Sur place', %s, %s, %s, 0, 1)""",
             (
+                ets,
                 reference,
                 id_table,
                 random.choice(PRENOMS),
@@ -272,7 +324,7 @@ def _generer_historique(conn, articles, nb_jours=21):
         )
 
 
-def _generer_mouvements(conn):
+def _generer_mouvements(conn, ets):
     """Rejoue les ventes de boissons pour reconstituer un journal de stock cohérent.
 
     Le stock déclaré dans ARTICLES est le stock *final* voulu : on remonte donc à
@@ -286,13 +338,16 @@ def _generer_mouvements(conn):
         JOIN commandes c ON l.id_commande = c.id
         JOIN articles a ON a.id = l.id_article
         WHERE a.gere_stock = 1 AND c.statut != 'Annulée'
+          AND c.id_etablissement = %s
         ORDER BY c.date_commande, l.id
-        """
+        """,
+        (ets,),
     ):
         ventes.setdefault(ligne["id_article"], []).append(ligne)
 
     articles = conn.execute(
-        "SELECT id, stock FROM articles WHERE gere_stock = 1"
+        "SELECT id, stock FROM articles WHERE gere_stock = 1 AND id_etablissement = %s",
+        (ets,),
     ).fetchall()
 
     debut = (date.today() - timedelta(days=22)).strftime("%Y-%m-%d 08:00:00")
@@ -304,10 +359,10 @@ def _generer_mouvements(conn):
 
         conn.execute(
             """INSERT INTO mouvements_stock
-               (id_article, type_mouvement, quantite, stock_apres, motif,
-                id_utilisateur, date_mouvement)
-               VALUES (%s, 'Entrée', %s, %s, 'Approvisionnement initial', 1, %s)""",
-            (article["id"], approvisionnement, approvisionnement, debut),
+               (id_etablissement, id_article, type_mouvement, quantite, stock_apres,
+                motif, id_utilisateur, date_mouvement)
+               VALUES (%s, %s, 'Entrée', %s, %s, 'Approvisionnement initial', 1, %s)""",
+            (ets, article["id"], approvisionnement, approvisionnement, debut),
         )
 
         stock_courant = approvisionnement
@@ -315,10 +370,11 @@ def _generer_mouvements(conn):
             stock_courant -= ligne["quantite"]
             conn.execute(
                 """INSERT INTO mouvements_stock
-                   (id_article, type_mouvement, quantite, stock_apres, motif,
-                    id_utilisateur, date_mouvement)
-                   VALUES (%s, 'Sortie', %s, %s, %s, 1, %s)""",
+                   (id_etablissement, id_article, type_mouvement, quantite,
+                    stock_apres, motif, id_utilisateur, date_mouvement)
+                   VALUES (%s, %s, 'Sortie', %s, %s, %s, 1, %s)""",
                 (
+                    ets,
                     article["id"],
                     ligne["quantite"],
                     stock_courant,
@@ -328,16 +384,18 @@ def _generer_mouvements(conn):
             )
 
 
-def _generer_depenses(conn):
+def _generer_depenses(conn, ets):
     for index, (libelle, categorie, montant, fournisseur) in enumerate(
         DEPENSES, start=1
     ):
         jour = date.today() - timedelta(days=random.randint(0, 20))
         conn.execute(
-            """INSERT INTO depenses (reference, libelle, categorie, montant, fournisseur,
-                                     mode_paiement, id_utilisateur, date_depense)
-               VALUES (%s, %s, %s, %s, %s, %s, 1, %s)""",
+            """INSERT INTO depenses (id_etablissement, reference, libelle, categorie,
+                                     montant, fournisseur, mode_paiement,
+                                     id_utilisateur, date_depense)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s)""",
             (
+                ets,
                 f"DEP-{index:04d}",
                 libelle,
                 categorie,

@@ -322,6 +322,141 @@ def _tables_manquantes(conn):
     return attendues - existantes
 
 
+# Tables métier rattachées à un établissement. L'ordre importe : une table est
+# migrée avant celles qui la référencent.
+TABLES_ETABLISSEMENT = (
+    "utilisateurs",
+    "modules",
+    "compteurs",
+    "tables_salle",
+    "categories",
+    "articles",
+    "commandes",
+    "paiements",
+    "mouvements_stock",
+    "depenses",
+)
+
+# Colonnes qui étaient uniques sur toute la base et ne le sont plus que par
+# établissement : deux maquis ont chacun leur table « 1 » et leur CMD-0001.
+# L'email n'y figure pas : il sert à se connecter, donc il reste global.
+UNICITES_PAR_ETABLISSEMENT = {
+    "modules": "cle",
+    "compteurs": "prefixe",
+    "tables_salle": "numero",
+    "categories": "nom",
+    "articles": "reference",
+    "commandes": "reference",
+    "paiements": "reference",
+    "depenses": "reference",
+}
+
+NOM_ETABLISSEMENT_REPRISE = "Mon établissement"
+
+
+def _colonnes(conn, table):
+    return {
+        ligne["nom"]
+        for ligne in conn.execute(
+            """SELECT column_name AS nom FROM information_schema.columns
+               WHERE table_schema = %s AND table_name = %s""",
+            (nom_base(), table),
+        ).fetchall()
+    }
+
+
+def _index_uniques_sur(conn, table, colonne):
+    """Index uniques ne portant que sur cette colonne, donc à élargir."""
+    lignes = conn.execute(
+        """SELECT index_name AS nom, COUNT(*) AS colonnes,
+                  MAX(column_name) AS colonne
+           FROM information_schema.statistics
+           WHERE table_schema = %s AND table_name = %s AND non_unique = 0
+           GROUP BY index_name""",
+        (nom_base(), table),
+    ).fetchall()
+    return [
+        ligne["nom"]
+        for ligne in lignes
+        if ligne["colonnes"] == 1 and ligne["colonne"] == colonne
+    ]
+
+
+def _etablissement_de_reprise(conn):
+    """L'établissement auquel rattacher les données d'une base mono-maquis."""
+    ligne = conn.execute("SELECT id FROM etablissements ORDER BY id LIMIT 1").fetchone()
+    if ligne:
+        return ligne["id"]
+    return conn.execute(
+        "INSERT INTO etablissements (nom) VALUES (%s)", (NOM_ETABLISSEMENT_REPRISE,)
+    ).lastrowid
+
+
+def _migration_necessaire(conn):
+    """Deux sondages suffisent à savoir si la base est déjà multi-établissement.
+
+    Parcourir les dix tables à chaque démarrage coûterait vingt allers-retours
+    pour ne rien faire. La première condition attrape une base d'avant la
+    migration, la seconde une migration interrompue en cours de route : MySQL
+    valide chaque ALTER au fil de l'eau, un plantage laisserait la base à
+    moitié convertie.
+    """
+    return "id_etablissement" not in _colonnes(conn, "utilisateurs") or bool(
+        _index_uniques_sur(conn, "commandes", "reference")
+    )
+
+
+def _migrer_vers_multi_etablissement(conn):
+    """Rattache une base déjà en service à un établissement, sans perdre de données.
+
+    Les installations d'avant le multi-établissement n'ont pas la colonne
+    id_etablissement, et leurs numéros de table ou de commande sont uniques sur
+    toute la base. On ajoute la colonne, on y met l'établissement de reprise,
+    puis on élargit les contraintes d'unicité. Chaque étape se teste avant de
+    s'exécuter : la fonction tourne à chaque démarrage et ne doit rien faire
+    quand la base est déjà à jour.
+    """
+    a_touche = False
+
+    for table in TABLES_ETABLISSEMENT:
+        if "id_etablissement" in _colonnes(conn, table):
+            continue
+        a_touche = True
+        id_reprise = _etablissement_de_reprise(conn)
+        journal.info("Migration multi-établissement : colonne ajoutée à %s", table)
+
+        # En trois temps : la colonne naît nullable pour que les lignes déjà
+        # présentes passent, puis elle se remplit, puis elle se ferme.
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN id_etablissement INT NULL")
+        conn.execute(f"UPDATE {table} SET id_etablissement = %s", (id_reprise,))
+        if table != "utilisateurs":  # un compte plateforme n'a pas d'établissement
+            conn.execute(f"ALTER TABLE {table} MODIFY id_etablissement INT NOT NULL")
+        conn.execute(
+            f"""ALTER TABLE {table}
+                ADD CONSTRAINT fk_{table}_etablissement
+                FOREIGN KEY (id_etablissement) REFERENCES etablissements(id)"""
+        )
+
+    for table, colonne in UNICITES_PAR_ETABLISSEMENT.items():
+        for index in _index_uniques_sur(conn, table, colonne):
+            a_touche = True
+            journal.info("Migration multi-établissement : unicité %s.%s", table, colonne)
+            if index == "PRIMARY":
+                conn.execute(
+                    f"""ALTER TABLE {table} DROP PRIMARY KEY,
+                        ADD PRIMARY KEY (id_etablissement, {colonne})"""
+                )
+            else:
+                conn.execute(f"ALTER TABLE {table} DROP INDEX `{index}`")
+                conn.execute(
+                    f"""ALTER TABLE {table}
+                        ADD UNIQUE KEY uq_{table}_{colonne} (id_etablissement, {colonne})"""
+                )
+
+    if a_touche:
+        conn.commit()
+
+
 def initialiser_base():
     """Crée la base et les tables si elles n'existent pas encore.
 
@@ -340,10 +475,12 @@ def initialiser_base():
             for instruction in instructions_schema():
                 conn.execute(instruction)
             conn.commit()
+        if _migration_necessaire(conn):
+            _migrer_vers_multi_etablissement(conn)
 
 
 def generer_reference(prefixe, table):
-    """Construit une référence lisible du type CMD-0001.
+    """Construit une référence lisible du type CMD-0001, propre à l'établissement.
 
     Le numéro vient d'un compteur dédié, verrouillé le temps de l'incrément :
     un simple `COUNT(*) + 1` attribuait la même référence à deux commandes
@@ -351,15 +488,21 @@ def generer_reference(prefixe, table):
     Le compteur s'amorce sur les lignes déjà présentes (jeu de démonstration,
     reprise de données) au premier appel.
     """
+    from backend.etablissement import courant
+
+    id_etablissement = courant()
     with connexion() as conn:
         conn.execute(
-            f"""INSERT INTO compteurs (prefixe, valeur)
-                SELECT %s, COUNT(*) + 1 FROM {table}
+            f"""INSERT INTO compteurs (id_etablissement, prefixe, valeur)
+                SELECT %s, %s, COUNT(*) + 1 FROM {table}
+                 WHERE id_etablissement = %s
                 ON DUPLICATE KEY UPDATE valeur = valeur + 1""",
-            (prefixe,),
+            (id_etablissement, prefixe, id_etablissement),
         )
         numero = conn.execute(
-            "SELECT valeur FROM compteurs WHERE prefixe = %s", (prefixe,)
+            """SELECT valeur FROM compteurs
+               WHERE id_etablissement = %s AND prefixe = %s""",
+            (id_etablissement, prefixe),
         ).fetchone()["valeur"]
         conn.commit()
     return f"{prefixe}-{numero:04d}"
