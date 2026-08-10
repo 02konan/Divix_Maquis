@@ -43,6 +43,7 @@ Comptes de démonstration :
 |----------|----------------------------|--------------|
 | Gérant   | `admin@divixmaquis.ci`     | `admin123`   |
 | Caissier | `caisse@divixmaquis.ci`    | `caisse123`  |
+| Gestionnaire de stock | `stock@divixmaquis.ci` | `stock123` |
 | Serveur  | `serveur@divixmaquis.ci`   | `serveur123` |
 | Serveur bar | `bar@divixmaquis.ci`    | `bar123`     |
 | Serveur restaurant | `resto@divixmaquis.ci` | `resto123` |
@@ -141,13 +142,19 @@ donc un basculement peut mettre ce délai à se propager aux autres workers guni
 | | Dashboard | Salle | Commandes | Maquis | Menu | Stock | Caisse | Dépenses |
 |---|---|---|---|---|---|---|---|---|
 | **Gérant**   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| | *(et la page Administration)* | | | | | | | |
+| | *(et les pages Journal et Administration)* | | | | | | | |
 | **Caissier** | — | ✓ | ✓ | — | — | — | ✓ | — |
+| **Gestionnaire de stock** | — | — | — | — | — | ✓ | — | ✓ |
 | **Serveur**  | — | ✓ | ✓ | lecture | lecture | — | — | — |
 | **Serveur bar** | — | ✓ | ✓ | lecture | — | — | — | — |
 | **Serveur restaurant** | — | ✓ | ✓ | — | lecture | — | — | — |
 | **Administrateur plateforme** | — | — | — | — | — | — | — | — |
 | | *(la seule page Établissements, dans aucun maquis)* | | | | | | | |
+
+Le **gestionnaire de stock** tient les réserves : il enregistre les entrées, sorties,
+pertes et inventaires, et paie les approvisionnements. Il ne touche ni à la carte, ni
+à la caisse, ni aux commandes — le reste du logiciel lui est fermé, pages et appels de
+données compris.
 
 « lecture » veut dire la page sans ses boutons d'action : un serveur consulte la carte
 et met les articles au panier, mais ne crée, ne modifie ni ne retire rien. Le masquage
@@ -196,7 +203,29 @@ connexion sur sa première page autorisée. Un rôle absent du tableau n'a accè
 | **Stock**     | Stock des boissons, seuils d'alerte, entrées/sorties/pertes/inventaires |
 | **Caisse**    | Encaissements totaux ou partiels, répartition par mode de paiement, journal de caisse |
 | **Dépenses**  | Approvisionnements, salaires, loyer, charges |
+| **Journal**   | Réservé au gérant : qui a fait quoi, et quand |
 | **Plateforme** | Réservée à l'éditeur : tous les établissements hébergés, création et suspension |
+
+### Journal des actions
+
+Le journal se remplit tout seul, depuis un crochet posé sur les réponses de
+l'application : **chaque écriture réussie y laisse une ligne**, sans que la route
+concernée ait à y penser. Ajouter une écriture au logiciel ne peut donc pas oublier de
+se journaliser — il suffit de lui donner un libellé dans `backend/journal.py`, et un
+test échoue tant que ce n'est pas fait. Les échecs et les consultations n'y entrent
+pas : un formulaire refusé n'est pas une action.
+
+Chaque ligne porte la date, l'auteur, son rôle, ce qui a été touché et le contenu du
+formulaire. Le nom et le rôle sont recopiés plutôt que liés : la trace survit à la
+suppression du compte qui l'a laissée. **Aucun mot de passe n'y entre**, même haché —
+un journal consultable ne doit pas devenir une liste de secrets.
+
+Écrire dans le journal ne peut pas faire échouer l'action qu'il trace : un problème
+d'écriture part dans les journaux techniques, où il reste trouvable, mais l'utilisateur
+voit son opération réussir — parce qu'elle a réussi.
+
+Les actions de la console plateforme n'y figurent pas : elles n'appartiennent à aucun
+maquis.
 
 ### Les deux cartes
 
@@ -210,6 +239,18 @@ de l'autre carte est refusé.
 Chaque article se **modifie** depuis sa carte — le bouton *Modifier* rouvre le
 formulaire prérempli. Le stock n'y est volontairement pas modifiable : il ne bouge que
 par un mouvement enregistré dans la page Stock, pour que l'inventaire garde une trace.
+
+### Champs masqués
+
+Deux champs sont retirés des formulaires pour l'instant, commentés sur place et prêts
+à revenir : **Couverts** dans la prise de commande, et **Coût de revient** dans la
+carte. Les colonnes restent en base et les valeurs déjà saisies sont intactes.
+
+Un champ absent du formulaire de modification vaut **« ne pas y toucher »**, pas
+« zéro » : modifier un article laisse son coût de revient tel quel, il ne l'efface pas.
+Une commande prise sans champ Couverts en enregistre 1. En revanche, un article *créé*
+maintenant naît avec un coût de revient nul — sa marge et sa valeur de stock affichent
+donc 0 tant que le champ n'est pas remis.
 
 ### Raccourcis entre les pages
 
@@ -241,6 +282,7 @@ divix_maquis/
 │   ├── schema.sql          schéma MySQL
 │   ├── database.py         connexion, helpers de requête, migration du schéma
 │   ├── etablissement.py    établissement courant + console plateforme
+│   ├── journal.py          journal des actions (libellés + lecture)
 │   ├── auth.py             authentification (mots de passe hachés)
 │   ├── models.py           utilisateur Flask-Login
 │   ├── lectures.py         toutes les lectures (listes, compteurs, dashboard)
@@ -272,7 +314,7 @@ lit ; il ne dit rien de ce qu'on désigne.
 
 `etablissements`, `roles`, `utilisateurs`, `tables_salle`, `categories`, `articles`,
 `commandes`, `lignes_commande`, `paiements`, `mouvements_stock`, `depenses`,
-`compteurs`, `modules`.
+`compteurs`, `modules`, `journal_actions`.
 
 Toutes portent un `id_etablissement` sauf trois : `etablissements` elle-même,
 `roles` qui est commune à la plateforme, et `lignes_commande` — une ligne appartient

@@ -356,6 +356,7 @@ def test_ajout_article_au_menu(client_connecte):
 COMPTES = {
     "Gérant": ("admin@divixmaquis.ci", "admin123"),
     "Caissier": ("caisse@divixmaquis.ci", "caisse123"),
+    "Gestionnaire de stock": ("stock@divixmaquis.ci", "stock123"),
     "Serveur": ("serveur@divixmaquis.ci", "serveur123"),
     "Serveur bar": ("bar@divixmaquis.ci", "bar123"),
     "Serveur restaurant": ("resto@divixmaquis.ci", "resto123"),
@@ -1610,3 +1611,199 @@ def test_une_commande_ne_peut_pas_occuper_la_table_du_voisin(app_maquis):
         ]
         == "Libre"
     )
+
+
+# ----------------------------------------------------------------------------
+# JOURNAL DES ACTIONS
+# ----------------------------------------------------------------------------
+
+
+def test_le_journal_enregistre_qui_a_fait_quoi(app_maquis):
+    from backend import journal
+
+    gerant = _connecte_en(app_maquis, "Gérant")
+    creation = gerant.post(
+        "/maquis/add",
+        data={"nom": "Sucrerie témoin", "categorie": "5", "prix": "800",
+              "gere_stock": "0"},
+    ).get_json()
+    assert creation["success"] is True
+
+    _cadrer()
+    ligne = journal.liste()[0]
+    assert ligne["libelle"] == "Article ajouté au maquis"
+    assert ligne["nom_utilisateur"] == "Konan Divix"
+    assert ligne["role_utilisateur"] == "Gérant"
+    assert ligne["cible"] == creation["reference"]
+    assert "Sucrerie témoin" in ligne["details"]
+
+    # La connexion elle-même laisse une trace.
+    assert any(action["libelle"] == "Connexion" for action in journal.liste())
+
+
+def test_le_journal_ignore_les_echecs_et_les_consultations(app_maquis):
+    """Un formulaire refusé n'est pas une action, une lecture non plus."""
+    from backend import journal
+
+    gerant = _connecte_en(app_maquis, "Gérant")
+    _cadrer()
+    avant = len(journal.liste())
+
+    assert gerant.post("/maquis/add", data={"nom": "Sans prix"}).status_code == 400
+    gerant.get("/maquis/list")
+    gerant.get("/caisse/list")
+
+    _cadrer()
+    assert len(journal.liste()) == avant
+
+
+def test_le_journal_ne_recopie_aucun_mot_de_passe(app_maquis):
+    """Un journal consultable ne doit pas devenir une liste de secrets."""
+    from backend import journal
+
+    gerant = _connecte_en(app_maquis, "Gérant")
+    assert gerant.post(
+        "/administration/utilisateurs",
+        data={"nom": "Koffi", "email": "koffi@x.ci", "mot_de_passe": "secret-koffi",
+              "id_role": "2"},
+    ).get_json()["success"] is True
+
+    _cadrer()
+    tout = " ".join(str(action["details"]) for action in journal.liste())
+    assert "secret-koffi" not in tout
+    assert "admin123" not in tout
+    assert "koffi@x.ci" in tout  # le reste du formulaire, lui, est bien tracé
+
+
+def test_le_journal_est_propre_a_chaque_etablissement(app_maquis):
+    from backend import etablissement, journal
+
+    maison = _cadrer()
+    _connecte_en(app_maquis, "Gérant")
+    _peupler_voisin()
+    voisin_actions = journal.liste()
+
+    etablissement.definir(maison)
+    assert MARQUE_VOISIN not in str(journal.liste())
+    assert voisin_actions == []  # rien n'a été journalisé chez le voisin
+
+
+def test_le_journal_est_reserve_au_gerant(app_maquis):
+    for role in ("Caissier", "Serveur bar", "Gestionnaire de stock"):
+        client = _connecte_en(app_maquis, role)
+        assert client.get("/journal").status_code == 302
+        assert client.get("/journal/list").status_code == 403
+
+    assert _connecte_en(app_maquis, "Gérant").get("/journal").status_code == 200
+
+
+def test_toute_ecriture_declaree_a_un_libelle(app_maquis):
+    """Une écriture ajoutée au logiciel doit être journalisée, ou l'être sciemment.
+
+    Le test liste les endpoints d'écriture et vérifie qu'aucun n'a été oublié
+    sans qu'on l'ait décidé : sans lui, une nouvelle route passerait sous les
+    radars du journal en silence.
+    """
+    from backend import journal
+
+    # Actions de la console plateforme : elles ne sont dans le journal d'aucun
+    # maquis, puisqu'elles n'appartiennent à aucun.
+    hors_journal = {"plateforme_add", "plateforme_actif", "inscription"}
+
+    ecritures_declarees = {
+        regle.endpoint
+        for regle in app_maquis.url_map.iter_rules()
+        if "POST" in regle.methods
+    }
+    assert ecritures_declarees - set(journal.LIBELLES) == hors_journal
+
+
+# ----------------------------------------------------------------------------
+# GESTIONNAIRE DE STOCK
+# ----------------------------------------------------------------------------
+
+
+def test_le_gestionnaire_de_stock_tient_le_stock_et_les_depenses(app_maquis):
+    from backend import lectures
+
+    gestionnaire = _connecte_en(app_maquis, "Gestionnaire de stock")
+    assert gestionnaire.get("/stock").status_code == 200
+    assert gestionnaire.get("/depense").status_code == 200
+
+    _cadrer()
+    article = next(a for a in lectures.liste_stock())
+    mouvement = gestionnaire.post(
+        "/stock/mouvement",
+        data={"id_article": article["id"], "type_mouvement": "Entrée",
+              "quantite": "5", "motif": "Livraison"},
+    ).get_json()
+    assert mouvement["success"] is True
+    assert mouvement["stock_apres"] == article["stock"] + 5
+
+    depense = gestionnaire.post(
+        "/depense/add",
+        data={"libelle": "Casiers", "categorie": "Approvisionnement",
+              "montant": "90000"},
+    ).get_json()
+    assert depense["success"] is True
+
+
+def test_le_gestionnaire_de_stock_ne_touche_a_rien_d_autre(app_maquis):
+    gestionnaire = _connecte_en(app_maquis, "Gestionnaire de stock")
+
+    for page in ("/", "/caisse", "/maquis", "/menu", "/commande", "/salle",
+                 "/administration"):
+        assert gestionnaire.get(page).status_code == 302, page
+
+    assert gestionnaire.post(
+        "/commande/add", data={"type_service": "Sur place", "articles": "[]"}
+    ).status_code == 403
+    assert gestionnaire.post(
+        "/caisse/add", data={"reference": "CMD-0001", "montant": "1", "mode": "Espèces"}
+    ).status_code == 403
+
+
+# ----------------------------------------------------------------------------
+# CHAMPS MASQUÉS
+# ----------------------------------------------------------------------------
+
+
+def test_les_champs_couverts_et_cout_sont_masques(app_maquis):
+    gerant = _connecte_en(app_maquis, "Gérant")
+    assert 'name="couverts"' not in gerant.get("/commande").get_data(as_text=True)
+    assert 'name="cout_revient"' not in gerant.get("/maquis").get_data(as_text=True)
+
+
+def test_une_commande_sans_couverts_en_compte_un(app_maquis):
+    gerant = _connecte_en(app_maquis, "Gérant")
+    article = gerant.get("/menu/disponibles").get_json()["data"][0]
+    creation = gerant.post(
+        "/commande/add",
+        data={"type_service": "Sur place",
+              "articles": f'[{{"id_article": {article["id"]}, "quantite": 1}}]'},
+    ).get_json()
+
+    detail = gerant.get(f"/commande/{creation['reference']}").get_json()["data"]
+    assert detail["couverts"] == 1
+
+
+def test_modifier_un_article_ne_remet_pas_le_cout_a_zero(app_maquis):
+    """Le champ masqué vaut « ne pas y toucher », pas « zéro »."""
+    from backend import lectures
+
+    gerant = _connecte_en(app_maquis, "Gérant")
+    _cadrer()
+    article = next(a for a in lectures.liste_articles(("Bar",)) if a["cout_revient"] > 0)
+
+    modification = gerant.post(
+        f"/maquis/{article['id']}/modifier",
+        data={"nom": article["nom"] + " (retouché)", "categorie": "5",
+              "prix": article["prix"], "gere_stock": "1" if article["gere_stock"] else "0",
+              "seuil_alerte": article["seuil_alerte"], "disponible": "1"},
+    ).get_json()
+    assert modification["success"] is True
+
+    _cadrer()
+    apres = lectures.article_par_id(article["id"])
+    assert apres["cout_revient"] == article["cout_revient"]
+    assert apres["nom"].endswith("(retouché)")

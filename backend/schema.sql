@@ -171,6 +171,26 @@ CREATE TABLE IF NOT EXISTS mouvements_stock (
     CONSTRAINT fk_mouvements_etablissement FOREIGN KEY (id_etablissement) REFERENCES etablissements(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Journal des actions : qui a fait quoi, et quand. Alimenté automatiquement
+-- après chaque écriture réussie, sans que l'appelant ait à y penser.
+-- id_utilisateur reste nul si le compte est supprimé : la trace survit à qui
+-- l'a laissée.
+CREATE TABLE IF NOT EXISTS journal_actions (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    id_etablissement INT NOT NULL,
+    id_utilisateur   INT NULL,
+    nom_utilisateur  VARCHAR(120) NOT NULL DEFAULT '—',
+    role_utilisateur VARCHAR(50) NOT NULL DEFAULT '—',
+    action           VARCHAR(60) NOT NULL,
+    libelle          VARCHAR(120) NOT NULL,
+    cible            VARCHAR(190) NULL,
+    details          VARCHAR(500) NULL,
+    date_action      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_journal_date (id_etablissement, date_action),
+    CONSTRAINT fk_journal_utilisateur   FOREIGN KEY (id_utilisateur)   REFERENCES utilisateurs(id) ON DELETE SET NULL,
+    CONSTRAINT fk_journal_etablissement FOREIGN KEY (id_etablissement) REFERENCES etablissements(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS depenses (
     id               INT AUTO_INCREMENT PRIMARY KEY,
     id_etablissement INT NOT NULL,

@@ -142,7 +142,6 @@ def modifier_article(
             "nom = %s",
             "id_categorie = %s",
             "prix = %s",
-            "cout_revient = %s",
             "gere_stock = %s",
             "seuil_alerte = %s",
             "disponible = %s",
@@ -151,12 +150,16 @@ def modifier_article(
             nom,
             id_categorie,
             float(prix),
-            float(cout_revient or 0),
             int(gere_stock),
             int(seuil_alerte or 0),
             int(disponible),
         ]
-        # Une photo absente du formulaire signifie « garder l'actuelle ».
+        # Une photo ou un coût absents du formulaire signifient « garder
+        # l'actuel ». Les traiter comme zéro effacerait la marge d'un article
+        # à chaque modification.
+        if cout_revient is not None:
+            champs.append("cout_revient = %s")
+            valeurs.append(float(cout_revient))
         if image:
             champs.append("image = %s")
             valeurs.append(image)

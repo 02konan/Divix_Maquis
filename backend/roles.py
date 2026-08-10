@@ -15,6 +15,7 @@ PAGES = [
     {"cle": "stock", "url": "/stock", "libelle": "Stock", "icone": "bxf bx-package"},
     {"cle": "caisse", "url": "/caisse", "libelle": "Caisse", "icone": "bx bx-currency-notes"},
     {"cle": "depense", "url": "/depense", "libelle": "Dépenses", "icone": "bxf bx-wallet"},
+    {"cle": "journal", "url": "/journal", "libelle": "Journal", "icone": "bxf bx-history"},
     {"cle": "administration", "url": "/administration", "libelle": "Administration", "icone": "bxf bx-cog"},
     {"cle": "plateforme", "url": "/plateforme", "libelle": "Établissements", "icone": "bxf bx-buildings"},
 ]
@@ -30,6 +31,9 @@ PAGES_PAR_ROLE = {
     # Seul le gérant administre les fonctionnalités et les comptes.
     "Gérant": PAGES_ETABLISSEMENT,
     "Caissier": {"salle", "commande", "caisse"},
+    # Celui qui tient les réserves : il compte le stock et paie les
+    # approvisionnements, mais ne touche ni à la carte ni à la caisse.
+    "Gestionnaire de stock": {"stock", "depense"},
     "Serveur": {"salle", "commande", "maquis", "menu"},
     "Serveur bar": {"salle", "commande", "maquis"},
     "Serveur restaurant": {"salle", "commande", "menu"},
@@ -112,6 +116,8 @@ PAGE_PAR_ENDPOINT = {
     "administration_utilisateur_actif": "administration",
     "administration_utilisateur_role": "administration",
     "administration_utilisateur_motdepasse": "administration",
+    "journal": "journal",
+    "journal_list": "journal",
     "plateforme": "plateforme",
     "plateforme_list": "plateforme",
     "plateforme_add": "plateforme",

@@ -9,6 +9,7 @@ from backend.roles import ROLE_PLATEFORME
 ROLES = [
     "Gérant",
     "Caissier",
+    "Gestionnaire de stock",
     "Serveur",
     "Serveur bar",
     "Serveur restaurant",
@@ -24,6 +25,7 @@ ETABLISSEMENT_VOISIN = ("Chez Tantie Adjoua", "Bouaké", "+225 07 00 00 00 02")
 UTILISATEURS = [
     ("Konan Divix", "admin@divixmaquis.ci", "admin123", "Gérant"),
     ("Awa Traoré", "caisse@divixmaquis.ci", "caisse123", "Caissier"),
+    ("Bakary Koné", "stock@divixmaquis.ci", "stock123", "Gestionnaire de stock"),
     ("Yao Serge", "serveur@divixmaquis.ci", "serveur123", "Serveur"),
     ("Ismaël Bar", "bar@divixmaquis.ci", "bar123", "Serveur bar"),
     ("Mariam Cuisine", "resto@divixmaquis.ci", "resto123", "Serveur restaurant"),

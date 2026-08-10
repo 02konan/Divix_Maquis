@@ -18,7 +18,7 @@ from flask_cors import CORS
 from flask_login import LoginManager, current_user
 from werkzeug.utils import secure_filename
 
-from backend import ecritures, etablissement, lectures, modules, roles
+from backend import ecritures, etablissement, journal, lectures, modules, roles
 from backend.auth import authentifier, utilisateur_par_id
 from backend.database import initialiser_base
 from backend.models import User
@@ -88,6 +88,51 @@ def restreindre_acces():
         "Accès non autorisé" if autorise is False else "Fonctionnalité désactivée"
     )
     return jsonify({"success": False, "error": message}), 403
+
+
+@app.after_request
+def journaliser(reponse):
+    """Laisse une trace de chaque écriture réussie, sans que les routes s'en occupent.
+
+    Le crochet est ici plutôt que dans chaque route : une écriture ajoutée au
+    logiciel se journalise alors d'office, il suffit de lui donner un libellé
+    dans `backend/journal.py`. Seules les réponses effectivement réussies sont
+    tracées — un formulaire refusé n'est pas une action.
+    """
+    if request.method != "POST" or not journal.journalisable(request.endpoint):
+        return reponse
+    if reponse.status_code >= 400:
+        return reponse
+    if reponse.is_json and reponse.get_json(silent=True) is not None:
+        if not reponse.get_json(silent=True).get("success", True):
+            return reponse
+
+    journal.enregistrer(
+        action=request.endpoint,
+        utilisateur={
+            "id": session.get("user_id"),
+            "nom": session.get("user_name"),
+            "role": session.get("user_role"),
+        },
+        cible=cible_journalisee(reponse),
+        details=journal.resumer(request.form),
+    )
+    return reponse
+
+
+CLES_CIBLE = ("reference", "id_article", "id_utilisateur", "id_table", "cle")
+
+
+def cible_journalisee(reponse):
+    """Ce que l'action a touché : la référence rendue, sinon l'objet désigné."""
+    donnees = reponse.get_json(silent=True) if reponse.is_json else None
+    if isinstance(donnees, dict) and donnees.get("reference"):
+        return donnees["reference"]
+    for source in (request.view_args or {}, request.form):
+        for cle in CLES_CIBLE:
+            if cle in source:
+                return source[cle]
+    return None
 
 
 @app.context_processor
@@ -482,7 +527,14 @@ def _carte_modifier(page, id_article):
         nom=nom,
         id_categorie=id_categorie,
         prix=nombre(prix),
-        cout_revient=nombre(request.form.get("cout_revient")),
+        # Le champ est masqué du formulaire : absent, il vaut « ne pas y
+        # toucher ». L'interpréter comme zéro effacerait la marge à chaque
+        # modification d'un article.
+        cout_revient=(
+            nombre(request.form["cout_revient"])
+            if "cout_revient" in request.form
+            else None
+        ),
         gere_stock=gere_stock,
         seuil_alerte=int(nombre(request.form.get("seuil_alerte"))) if gere_stock else 0,
         disponible=1 if request.form.get("disponible", "1") == "1" else 0,
@@ -874,6 +926,23 @@ def administration_utilisateur_motdepasse(id_utilisateur):
     if not resultat["success"]:
         return jsonify(resultat), 400
     return jsonify({**resultat, "message": "Mot de passe réinitialisé"})
+
+
+# ================================== JOURNAL ===================================
+
+
+# L'endpoint garde le nom de la page ; la fonction, non, pour ne pas masquer le
+# module `journal` importé plus haut.
+@app.route("/journal", endpoint="journal")
+def journal_page():
+    return render_template(
+        "journal.html", active_page="journal", libelles=journal.libelles_utilises()
+    )
+
+
+@app.route("/journal/list")
+def journal_list():
+    return jsonify({"data": journal.liste(), "counter": journal.compteurs()})
 
 
 # ================================= PLATEFORME =================================

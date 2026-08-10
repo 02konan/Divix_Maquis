@@ -178,7 +178,9 @@ function ouvrirModification(idArticle) {
     document.getElementById('articleId').value = article.id;
     document.getElementById('articleNom').value = article.nom;
     document.getElementById('articlePrix').value = article.prix;
-    document.getElementById('articleCout').value = article.cout_revient || '';
+    // Le coût de revient est masqué : le champ peut ne pas exister.
+    const cout = document.getElementById('articleCout');
+    if (cout) cout.value = article.cout_revient || '';
     document.getElementById('articleSeuil').value = article.seuil_alerte || 0;
     document.getElementById('articleGereStock').value = article.gere_stock ? '1' : '0';
     document.getElementById('articleDisponible').value = article.disponible ? '1' : '0';

@@ -53,10 +53,14 @@
                         <label for="articlePrix" class="form-label">Prix de vente (FCFA) <span class="small text-danger">*</span></label>
                         <input type="number" class="form-control" id="articlePrix" name="prix" placeholder="0" min="0" required>
                     </div>
+                    {# Coût de revient masqué pour l'instant. Le champ absent du
+                       formulaire vaut « ne pas y toucher » : une modification
+                       laisse la valeur déjà en base, elle ne la remet pas à zéro.
                     <div class="col mb-3">
                         <label for="articleCout" class="form-label">Coût de revient (FCFA)</label>
                         <input type="number" class="form-control" id="articleCout" name="cout_revient" placeholder="0" min="0">
                     </div>
+                    #}
                 </div>
             </fieldset>
 

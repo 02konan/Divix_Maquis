@@ -25,6 +25,9 @@
     {% if active_page == 'administration' %}
     <script src="{{ url_for('static', filename='js/administration.js') }}" defer></script>
     {% endif %}
+    {% if active_page == 'journal' %}
+    <script src="{{ url_for('static', filename='js/journal.js') }}" defer></script>
+    {% endif %}
     {% if active_page == 'plateforme' %}
     <script src="{{ url_for('static', filename='js/plateforme.js') }}" defer></script>
     {% endif %}
