@@ -129,7 +129,7 @@ PAGE_PAR_ENDPOINT = {
 ENDPOINTS_GESTION = {"salle_add"}
 ROLES_GESTION = {"Gérant"}
 
-ENDPOINTS_PUBLICS = {"login", "inscription", "static"}
+ENDPOINTS_PUBLICS = {"login", "inscription", "support", "static"}
 ENDPOINTS_TOUJOURS_AUTORISES = {"logout"}
 
 # Endpoints qui rendent une page : un refus s'y traduit par une redirection

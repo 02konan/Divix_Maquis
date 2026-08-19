@@ -1712,7 +1712,7 @@ def test_toute_ecriture_declaree_a_un_libelle(app_maquis):
 
     # Actions de la console plateforme : elles ne sont dans le journal d'aucun
     # maquis, puisqu'elles n'appartiennent à aucun.
-    hors_journal = {"plateforme_add", "plateforme_actif", "inscription"}
+    hors_journal = {"plateforme_add", "plateforme_actif", "inscription", "support"}
 
     ecritures_declarees = {
         regle.endpoint
@@ -1997,3 +1997,94 @@ def test_les_champs_ne_declenchent_pas_le_zoom_sur_telephone():
         entete = (RACINE / "templates" / gabarit).read_text(encoding="utf-8")
         assert "user-scalable=no" not in entete, gabarit
         assert "maximum-scale" not in entete, gabarit
+
+
+# ----------------------------------------------------------------------------
+# ENREGISTREMENT DU SUPPORT
+# ----------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def plateforme_vierge(app_maquis, monkeypatch):
+    """Une plateforme sans compte éditeur, clé d'accès posée."""
+    from backend.database import executer
+    from backend.roles import ROLE_PLATEFORME
+
+    executer(
+        """DELETE u FROM utilisateurs u JOIN roles r ON u.id_role = r.id
+           WHERE r.nom = %s""",
+        (ROLE_PLATEFORME,),
+    )
+    monkeypatch.setenv("CLE_SUPPORT", "cle-de-test-42")
+    return app_maquis
+
+
+def test_le_formulaire_support_cree_le_compte_de_l_editeur(plateforme_vierge):
+    client = plateforme_vierge.test_client()
+    assert client.get("/support").status_code == 200
+
+    creation = client.post(
+        "/support",
+        data={"cle": "cle-de-test-42", "nom": "Support Divix",
+              "email": "nouveau@divix.ci", "mot_de_passe": "MotDePasse123"},
+    ).get_json()
+    assert creation["success"] is True
+
+    editeur = plateforme_vierge.test_client()
+    assert editeur.post(
+        "/login", data={"email": "nouveau@divix.ci", "password": "MotDePasse123"}
+    ).get_json()["success"] is True
+    assert editeur.get("/plateforme").status_code == 200
+    # Aucun maquis : les pages de service lui restent fermées.
+    assert editeur.get("/caisse").status_code == 302
+
+
+def test_le_formulaire_support_exige_la_cle(plateforme_vierge):
+    from backend.auth import compte_plateforme_existe
+
+    client = plateforme_vierge.test_client()
+    refus = client.post(
+        "/support",
+        data={"cle": "je-devine", "nom": "Intrus", "email": "intrus@x.ci",
+              "mot_de_passe": "MotDePasse123"},
+    )
+    assert refus.status_code == 403
+    _cadrer()
+    assert compte_plateforme_existe() is False
+
+
+def test_le_formulaire_support_n_existe_pas_sans_cle(app_maquis, monkeypatch):
+    """Sans la variable d'environnement, la page n'est même pas annoncée."""
+    monkeypatch.delenv("CLE_SUPPORT", raising=False)
+    client = app_maquis.test_client()
+    assert client.get("/support").status_code == 404
+    assert client.post("/support", data={"cle": ""}).status_code == 404
+
+
+def test_le_formulaire_support_se_referme_apres_le_premier_compte(plateforme_vierge):
+    """Une porte d'entrée pour une plateforme neuve, pas une page de création."""
+    client = plateforme_vierge.test_client()
+    assert client.post(
+        "/support",
+        data={"cle": "cle-de-test-42", "nom": "Support", "email": "sup@divix.ci",
+              "mot_de_passe": "MotDePasse123"},
+    ).get_json()["success"] is True
+
+    assert client.get("/support").status_code == 404
+    assert client.post(
+        "/support",
+        data={"cle": "cle-de-test-42", "nom": "Second", "email": "second@divix.ci",
+              "mot_de_passe": "MotDePasse123"},
+    ).status_code == 404
+
+
+def test_le_formulaire_support_exige_un_mot_de_passe_solide(plateforme_vierge):
+    """Ce compte voit tous les établissements : six caractères ne suffisent pas."""
+    client = plateforme_vierge.test_client()
+    refus = client.post(
+        "/support",
+        data={"cle": "cle-de-test-42", "nom": "Support", "email": "sup@divix.ci",
+              "mot_de_passe": "court1"},
+    )
+    assert refus.status_code == 400
+    assert "10 caractères" in refus.get_json()["error"]

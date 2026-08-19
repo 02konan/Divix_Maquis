@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#3d6dff">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/outfit/outfit.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/boxicons/boxicons.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/admin.css')}}" />
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/login.css')}}" />
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/maquis.css')}}" />
+    <script src="{{ url_for('static', filename='vendor/sweetalert2/sweetalert2.all.min.js') }}"></script>
+    <title>Enregistrement du support - Divix Maquis</title>
+</head>
+<body class="login-body">
+    <div class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true" id="loginToast" style="position: absolute; top: 20px; left: 20px; z-index: 99;">
+        <div class="d-flex">
+            <div class="toast-body"></div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+    <div class="row login-container">
+        <div class="col-6 img">
+            <div class="d-flex w-100 align-items-center header-login-img">
+                <span class="m-0 login-subtilte">Support</span>
+                <div id="logo" class="d-flex border-0 ms-auto">
+                    <img src="/static/icons/logo.svg" alt="Logo">
+                </div>
+            </div>
+        </div>
+        <div class="col-6 d-flex flex-column align-items-center justify-content-center f-login">
+            <div class="align-items-center header-mobile">
+                <span class="m-0 text-muted">Enregistrement du support</span>
+            </div>
+            <img src="/static/icons/icon-512.png" alt="Logo Divix Maquis" class="img-fluid mb-3" style="max-width: 140px; height: auto;">
+            <p class="text-center text-muted mb-2">
+                Le compte de l'éditeur : celui qui ouvre la console des établissements.
+            </p>
+            <div class="alert alert-warning small w-100 py-2 px-3 mb-3" role="alert">
+                Cette page se referme dès que ce compte existe. Les suivants se créent
+                avec <code>outils/creer_compte_plateforme.py</code>.
+            </div>
+            <form action="{{ url_for('support') }}" method="post" class="form-login" id="supportForm">
+                <div class="form-floating mb-3">
+                    <input type="password" class="form-control" name="cle" id="cle" placeholder="Clé d'accès" required autocomplete="off">
+                    <label for="cle">Clé d'accès (variable <code>CLE_SUPPORT</code>)</label>
+                </div>
+                <hr class="my-3">
+                <div class="form-floating mb-3">
+                    <input type="text" class="form-control" name="nom" id="nom" placeholder="Support Divix" required>
+                    <label for="nom">Nom affiché</label>
+                </div>
+                <div class="form-floating mb-3">
+                    <input type="email" class="form-control" name="email" id="email" placeholder="support@divix.ci" required>
+                    <label for="email">Adresse email</label>
+                </div>
+                <div class="form-floating mb-3">
+                    <input type="password" class="form-control" name="mot_de_passe" id="mot_de_passe" placeholder="Mot de passe" required autocomplete="new-password">
+                    <label for="mot_de_passe">Mot de passe (10 caractères minimum)</label>
+                </div>
+                <button type="submit" class="btn-login">Créer le compte support</button>
+                <p class="text-center text-muted small mt-3 mb-0">
+                    <a href="{{ url_for('login') }}" class="forgot-link">Retour à la connexion</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script>
+        const toastEl = document.getElementById('loginToast');
+
+        function showAlert(type, message) {
+            if (!toastEl) return;
+            const toastBody = toastEl.querySelector('.toast-body');
+            toastEl.className = 'toast align-items-center bg-white text-dark';
+            const iconClass = type === 'success'
+                ? 'bi-check-circle-fill text-success'
+                : 'bi-exclamation-circle-fill text-danger';
+            toastBody.innerHTML = `<i class="bi ${iconClass} me-2"></i>${message}`;
+            bootstrap.Toast.getOrCreateInstance(toastEl).show();
+        }
+
+        const form = document.getElementById('supportForm');
+        const submitBtn = form.querySelector('.btn-login');
+        const originalBtnText = submitBtn.innerHTML;
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            if (document.getElementById('mot_de_passe').value.length < 10) {
+                showAlert('error', 'Le mot de passe doit faire au moins 10 caractères');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="bx bx-loader-lines bx-spin me-2"></i>Création en cours...';
+
+            try {
+                const response = await fetch('{{ url_for("support") }}', {
+                    method: 'POST',
+                    body: new FormData(this)
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('success', data.message);
+                    setTimeout(() => { window.location.href = data.redirect; }, 1500);
+                } else {
+                    showAlert('error', data.error || 'Une erreur est survenue');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showAlert('error', "Une erreur est survenue lors de l'enregistrement");
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+            }
+        });
+    </script>
+</body>
+</html>
