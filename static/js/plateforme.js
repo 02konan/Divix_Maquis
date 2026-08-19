@@ -101,6 +101,12 @@ document.addEventListener('DOMContentLoaded', () => {
         apres: () => paginationPlateforme.rafraichir(true)
     });
 
+    Divix.rafraichirRegulierement({
+        charger: chargerEtablissements,
+        intervalle: 60000,
+        pagination: paginationPlateforme
+    });
+
     Divix.brancherFormulaire({
         idBouton: 'submitEtablissementBtn',
         idFormulaire: 'etablissementForm',

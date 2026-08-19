@@ -1807,3 +1807,78 @@ def test_modifier_un_article_ne_remet_pas_le_cout_a_zero(app_maquis):
     apres = lectures.article_par_id(article["id"])
     assert apres["cout_revient"] == article["cout_revient"]
     assert apres["nom"].endswith("(retouché)")
+
+
+# ----------------------------------------------------------------------------
+# RAFRAÎCHISSEMENT AUTOMATIQUE
+# ----------------------------------------------------------------------------
+
+# Pages qui affichent des données changeantes, et l'intervalle attendu. Une page
+# ajoutée au logiciel doit venir ici, sinon son tableau resterait figé jusqu'au
+# prochain rafraîchissement manuel.
+PAGES_RAFRAICHIES = {
+    "dashboard.js": 30000,
+    "salle.js": 10000,
+    "commandes.js": 10000,
+    "carte.js": 60000,
+    "stock.js": 20000,
+    "caisse.js": 15000,
+    "depenses.js": 60000,
+    "journal.js": 30000,
+    "plateforme.js": 60000,
+}
+
+
+def _script(nom):
+    return (RACINE / "static" / "js" / nom).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("nom, intervalle", sorted(PAGES_RAFRAICHIES.items()))
+def test_chaque_page_de_donnees_se_rafraichit(nom, intervalle):
+    script = _script(nom)
+    assert "Divix.rafraichirRegulierement" in script, nom
+    assert f"intervalle: {intervalle}" in script, nom
+
+
+def test_aucune_page_ne_pose_son_propre_setinterval():
+    """Le rafraîchissement passe par l'aide commune, qui porte les précautions.
+
+    Un `setInterval` posé à la main dans une page rechargerait aussi quand
+    l'onglet est caché ou qu'une modale est ouverte — précisément ce que l'aide
+    commune évite.
+    """
+    fautives = [
+        chemin.name
+        for chemin in (RACINE / "static" / "js").glob("*.js")
+        if chemin.name != "commun.js" and "setInterval(" in chemin.read_text(encoding="utf-8")
+    ]
+    assert fautives == []
+
+
+def test_le_rafraichissement_porte_ses_precautions():
+    """Les quatre garde-fous sont dans l'aide commune, pas dans chaque page."""
+    commun = _script("commun.js")
+
+    assert "document.hidden" in commun            # onglet en arrière-plan
+    assert "'.modal.show'" in commun              # modale ouverte
+    assert "if (enCours" in commun                # rechargements qui se chevauchent
+    assert "pagination.aller" in commun or "barre.aller" in commun  # page conservée
+    assert "visibilitychange" in commun           # retour sur l'onglet
+
+
+def test_le_rafraichissement_est_muet():
+    """Ni spinner ni squelette quand la page se recharge toute seule."""
+    commun = _script("commun.js")
+
+    # Les indicateurs de chargement se taisent...
+    for aide in ("chargement(idTbody, colonnes = 8) {", "squelette(ids, actif = true) {"):
+        debut = commun.index(aide) + len(aide)
+        assert "if (Divix._silencieux) return;" in commun[debut:debut + 120], aide
+
+    # ... mais pas le message « aucune donnée », qui reste une information.
+    debut = commun.index("vide(idTbody, message, colonnes = 8) {")
+    assert "_silencieux" not in commun[debut:debut + 200]
+
+    # Les deux pages qui posent leur propre indicateur le taisent aussi.
+    for nom in ("carte.js", "salle.js"):
+        assert "Divix.silencieux()" in _script(nom), nom

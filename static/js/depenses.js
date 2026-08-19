@@ -53,6 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
         apres: () => paginationDepenses.rafraichir(true)
     });
 
+    Divix.rafraichirRegulierement({
+        charger: chargerDepenses,
+        intervalle: 60000,
+        pagination: paginationDepenses
+    });
+
     Divix.brancherFormulaire({
         idBouton: 'submitDepenseBtn',
         idFormulaire: 'depenseForm',

@@ -76,6 +76,12 @@ document.addEventListener('DOMContentLoaded', () => {
         libelle: 'mouvements'
     });
 
+    Divix.rafraichirRegulierement({
+        charger: chargerStock,
+        intervalle: 20000,
+        pagination: [paginationStock, paginationMouvements]
+    });
+
     appliquerFiltresStock = Divix.brancherFiltres({
         idTbody: 'tbody-stock',
         idRecherche: 'searchInput',

@@ -252,6 +252,42 @@ Une commande prise sans champ Couverts en enregistre 1. En revanche, un article 
 maintenant naît avec un coût de revient nul — sa marge et sa valeur de stock affichent
 donc 0 tant que le champ n'est pas remis.
 
+### Rafraîchissement automatique
+
+Toutes les pages qui affichent des données changeantes se rechargent seules : une
+commande prise en salle apparaît à la caisse sans que personne n'appuie sur F5.
+
+| Intervalle | Pages |
+|-----------|-------|
+| 10 s | Salle, Commandes — le service en direct |
+| 15 s | Caisse |
+| 20 s | Stock |
+| 30 s | Dashboard, Journal |
+| 60 s | Maquis, Menu, Dépenses, Établissements |
+
+Le mécanisme tient dans une seule aide, `Divix.rafraichirRegulierement`, parce que
+c'est là que sont les précautions — un `setInterval` posé page par page les
+oublierait, et un test refuse d'ailleurs qu'on en écrive un ailleurs :
+
+- **rien ne bouge tant qu'une modale est ouverte.** Reconstruire la liste des tickets
+  à encaisser pendant que le caissier vient d'en choisir un effacerait sa saisie ;
+- **rien ne se recharge quand l'onglet est en arrière-plan** — autant de requêtes pour
+  un écran que personne ne regarde. Revenir sur l'onglet recharge aussitôt, pour ne
+  pas lire des données figées ;
+- **un rechargement n'en déclenche pas un second** tant que le premier n'est pas
+  revenu, sinon un serveur lent accumule les requêtes ;
+- **la page de pagination consultée est conservée** : sans cela, un serveur qui lit la
+  page 3 y serait ramené en page 1 toutes les dix secondes.
+
+Le rechargement est **muet** : ni spinner ni squelette, seules les données changent.
+Faire clignoter le tableau toutes les dix secondes gênerait plus que l'absence de mise
+à jour. Le message « aucune donnée », lui, s'affiche toujours — c'est une information,
+pas un indicateur de chargement.
+
+La prise de commande ne recharge que la liste des tickets, pas le catalogue
+d'articles : celui-ci alimente le formulaire de saisie et n'a pas à bouger sous les
+doigts du serveur.
+
 ### Raccourcis entre les pages
 
 Trois boutons traversent les pages et ouvrent directement le formulaire visé, sans

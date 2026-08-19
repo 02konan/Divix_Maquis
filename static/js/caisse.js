@@ -114,6 +114,18 @@ document.addEventListener('DOMContentLoaded', () => {
         libelle: 'encaissements'
     });
 
+    // Le journal et la liste des tickets encaissables suivent les commandes
+    // prises en salle. La modale fermée est la condition du rafraîchissement :
+    // reconstruire la liste déroulante pendant qu'un ticket y est choisi
+    // effacerait la saisie en cours.
+    Divix.rafraichirRegulierement({
+        charger: async () => {
+            await Promise.all([chargerCaisse(), chargerEncaissables()]);
+        },
+        intervalle: 15000,
+        pagination: paginationCaisse
+    });
+
     appliquerFiltresCaisse = Divix.brancherFiltres({
         idTbody: 'tbody-caisse',
         idRecherche: 'searchInput',

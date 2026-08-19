@@ -371,6 +371,16 @@ document.addEventListener('DOMContentLoaded', () => {
         apres: () => paginationCommandes.rafraichir(true)
     });
 
+    // La page la plus regardée du service : un ticket ouvert par un serveur
+    // doit apparaître ici sans que le caissier rafraîchisse. Seule la liste
+    // des tickets est rechargée — pas le catalogue d'articles, qui alimente
+    // le formulaire de saisie et n'a pas à bouger sous les doigts.
+    Divix.rafraichirRegulierement({
+        charger: chargerCommandes,
+        intervalle: 10000,
+        pagination: paginationCommandes
+    });
+
     reprendrePanierDeLaCarte();
 
     // Arrivée depuis le bouton « Commander » de la caisse ou depuis la barre de

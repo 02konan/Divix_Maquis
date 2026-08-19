@@ -31,7 +31,9 @@ function grille() {
 }
 
 async function chargerMenu() {
-    grille().innerHTML = '<div class="squelette-plat"></div>'.repeat(8);
+    if (!Divix.silencieux()) {
+        grille().innerHTML = '<div class="squelette-plat"></div>'.repeat(8);
+    }
 
     try {
         const reponse = await Divix.charger(`${base}/list`);
@@ -241,6 +243,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     chargerMenu();
+    // Une carte affichée sur un écran de salle, ou ouverte par un client venu
+    // du QR code, doit finir par montrer les ruptures : le stock descend au fil
+    // des commandes. Sans urgence, d'où l'intervalle long.
+    Divix.rafraichirRegulierement({
+        charger: chargerMenu,
+        intervalle: 60000,
+        pagination: paginationMenu
+    });
 
     document.getElementById('searchInput')?.addEventListener('input', filtrerCartes);
 

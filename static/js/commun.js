@@ -74,7 +74,18 @@ const Divix = {
     /* États des tableaux                                                 */
     /* ------------------------------------------------------------------ */
 
+    // Un rafraîchissement automatique se fait sans rien annoncer : afficher le
+    // spinner toutes les dix secondes ferait clignoter la page en permanence,
+    // ce qui gêne plus que l'absence de mise à jour. Seuls les indicateurs de
+    // chargement sont tus — un tableau devenu vide le dit toujours.
+    _silencieux: false,
+
+    silencieux() {
+        return Divix._silencieux;
+    },
+
     chargement(idTbody, colonnes = 8) {
+        if (Divix._silencieux) return;
         const conteneur = document.getElementById(idTbody);
         if (!conteneur) return;
         conteneur.innerHTML = `
@@ -130,6 +141,7 @@ const Divix = {
     },
 
     squelette(ids, actif = true) {
+        if (Divix._silencieux) return;
         ids.forEach((id) => {
             const element = document.getElementById(id);
             if (element) element.classList.toggle('counter-skeleton', actif);
@@ -349,8 +361,77 @@ const Divix = {
             rafraichir(reinitialiser = false) {
                 if (reinitialiser) page = 1;
                 rendre();
+            },
+            // Lus par le rafraîchissement automatique, qui remet l'utilisateur
+            // sur la page qu'il consultait.
+            page: () => page,
+            aller(numero) {
+                page = numero;
+                rendre();
             }
         };
+    },
+
+    /* ------------------------------------------------------------------ */
+    /* Rafraîchissement automatique                                        */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Recharge la page à intervalle régulier : une commande prise en salle
+     * apparaît à la caisse sans que personne n'ait à rafraîchir.
+     *
+     * Quatre précautions, sans lesquelles le rafraîchissement dérange plus
+     * qu'il n'aide :
+     *
+     * - **rien ne bouge tant qu'une modale est ouverte.** Reconstruire la liste
+     *   des tickets à encaisser pendant que le caissier vient d'en choisir un
+     *   effacerait son choix ;
+     * - **rien ne se recharge quand l'onglet est en arrière-plan.** Ce serait
+     *   autant de requêtes pour un écran que personne ne regarde ; un maquis
+     *   qui laisse dix onglets ouverts martèlerait la base pour rien. Revenir
+     *   sur l'onglet recharge aussitôt, pour ne pas lire un écran figé ;
+     * - **un rechargement n'en déclenche pas un second** tant que le premier
+     *   n'est pas revenu, sinon un serveur lent accumule les requêtes ;
+     * - **la page de pagination consultée est conservée.** Sans cela, un
+     *   serveur qui lit la page 3 y serait ramené en page 1 toutes les dix
+     *   secondes.
+     *
+     * Le rechargement est muet : ni spinner ni squelette, seules les données
+     * changent (voir `Divix._silencieux`).
+     */
+    rafraichirRegulierement({ charger, intervalle = 15000, pagination = null }) {
+        let enCours = false;
+        // Une page peut porter deux tableaux paginés, comme le stock et son
+        // journal de mouvements : les deux doivent retrouver leur page.
+        const paginations = [pagination].flat().filter(Boolean);
+
+        const inopportun = () =>
+            document.hidden || document.querySelector('.modal.show') !== null;
+
+        const recharger = async () => {
+            if (enCours || inopportun()) return;
+            enCours = true;
+            const pages = paginations.map((barre) => barre.page());
+            Divix._silencieux = true;
+            try {
+                await charger();
+                paginations.forEach((barre, index) => barre.aller(pages[index]));
+            } catch (erreur) {
+                // Une coupure réseau ne doit pas arrêter le rafraîchissement :
+                // le service reprendra tout seul au prochain battement.
+                console.error(erreur);
+            } finally {
+                Divix._silencieux = false;
+                enCours = false;
+            }
+        };
+
+        const minuterie = setInterval(recharger, intervalle);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) recharger();
+        });
+
+        return { recharger, arreter: () => clearInterval(minuterie) };
     },
 
     /* ------------------------------------------------------------------ */

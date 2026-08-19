@@ -4,7 +4,9 @@ let tablesSalle = [];
 
 async function chargerSalle() {
     const conteneur = document.getElementById('plan-salle');
-    conteneur.innerHTML = '<p class="small text-muted m-0">Chargement du plan de salle...</p>';
+    if (!Divix.silencieux()) {
+        conteneur.innerHTML = '<p class="small text-muted m-0">Chargement du plan de salle...</p>';
+    }
 
     try {
         const reponse = await Divix.charger('/salle/list');
@@ -82,6 +84,7 @@ async function changerStatutTable(idTable, statut) {
 
 document.addEventListener('DOMContentLoaded', () => {
     chargerSalle();
+    Divix.rafraichirRegulierement({ charger: chargerSalle, intervalle: 10000 });
     document.getElementById('filtreZone')?.addEventListener('change', afficherPlan);
 
     Divix.brancherFormulaire({

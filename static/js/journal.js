@@ -45,6 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
         libelle: 'actions'
     });
 
+    Divix.rafraichirRegulierement({
+        charger: chargerJournal,
+        intervalle: 30000,
+        pagination: paginationJournal
+    });
+
     appliquerFiltresJournal = Divix.brancherFiltres({
         idTbody: 'tbody-journal',
         idRecherche: 'searchInput',

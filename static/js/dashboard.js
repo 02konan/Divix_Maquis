@@ -196,5 +196,8 @@ function afficherErreur(message) {
 
 document.addEventListener('DOMContentLoaded', () => {
     rafraichirDashboard();
-    setInterval(rafraichirDashboard, 5 * 60 * 1000);
+    // Le tableau de bord se rafraîchissait déjà, mais toutes les cinq minutes
+    // et même onglet fermé au fond du navigateur. L'aide commune resserre
+    // l'intervalle et n'interroge le serveur que quand l'écran est regardé.
+    Divix.rafraichirRegulierement({ charger: rafraichirDashboard, intervalle: 30000 });
 });
