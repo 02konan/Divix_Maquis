@@ -144,13 +144,17 @@ def actif(cle):
     return cle not in CLES or etats().get(cle, False)
 
 
-def liste():
-    """Les modules et leur état, pour la page d'administration."""
-    en_cours = etats()
+def liste(id_etablissement=None):
+    """Les modules d'un établissement et leur état.
+
+    La console plateforme lit ceux d'un maquis qui n'est pas le sien : elle
+    passe donc l'identifiant, là où l'application le tient de son contexte.
+    """
+    en_cours = _lire_etats(id_etablissement) if id_etablissement else etats()
     return [{**module, "actif": en_cours[module["cle"]]} for module in MODULES]
 
 
-def basculer(cle, actif_demande):
+def basculer(cle, actif_demande, id_etablissement=None):
     from backend.etablissement import courant
 
     if cle not in CLES:
@@ -166,7 +170,7 @@ def basculer(cle, actif_demande):
     executer(
         """INSERT INTO modules (id_etablissement, cle, actif) VALUES (%s, %s, %s)
            ON DUPLICATE KEY UPDATE actif = VALUES(actif)""",
-        (courant(), cle, int(actif_demande)),
+        (id_etablissement or courant(), cle, int(actif_demande)),
     )
     invalider_cache()
     return {"success": True, "cle": cle, "actif": actif_demande}

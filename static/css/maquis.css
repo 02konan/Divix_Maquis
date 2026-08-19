@@ -561,3 +561,26 @@
 @keyframes bx-rotation {
     to { transform: rotate(360deg); }
 }
+
+/* ---------------------------------------------------------------- */
+/* Pas de zoom automatique à la saisie, sur téléphone                */
+/* ---------------------------------------------------------------- */
+
+/* Safari iOS zoome sur tout champ dont le texte fait moins de 16 px, et ne
+   dézoome pas en sortant : le logiciel semblait sauter à chaque saisie. La
+   variable `--font-size` du thème vaut 13 px, d'où le déclenchement.
+
+   La règle est ici et pas dans `admin.css`, qui reste identique à celui de
+   Divix SysPaie. Et surtout pas de `user-scalable=no` dans la balise viewport :
+   cela réglerait le symptôme en interdisant aussi le zoom à deux doigts, dont
+   certains ont besoin pour lire. */
+@media (max-width: 991.98px) {
+    .form-control,
+    .form-select,
+    .form-check-input,
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}

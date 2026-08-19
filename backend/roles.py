@@ -111,7 +111,6 @@ PAGE_PAR_ENDPOINT = {
     "depense_list": "depense",
     "depense_add": "depense",
     "administration": "administration",
-    "administration_modules": "administration",
     "administration_utilisateur_add": "administration",
     "administration_utilisateur_actif": "administration",
     "administration_utilisateur_role": "administration",
@@ -122,6 +121,7 @@ PAGE_PAR_ENDPOINT = {
     "plateforme_list": "plateforme",
     "plateforme_add": "plateforme",
     "plateforme_actif": "plateforme",
+    "plateforme_modules": "plateforme",
 }
 
 # Écritures qui relèvent de la gestion de l'établissement, pas du service :

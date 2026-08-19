@@ -7,6 +7,7 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from flask import (
     Flask,
+    g,
     jsonify,
     redirect,
     render_template,
@@ -116,6 +117,9 @@ def journaliser(reponse):
         },
         cible=cible_journalisee(reponse),
         details=journal.resumer(request.form),
+        # Une route peut désigner l'établissement qu'elle a touché quand ce
+        # n'est pas le sien : c'est le cas de l'éditeur, qui n'en a aucun.
+        id_etablissement=g.get("journal_etablissement"),
     )
     return reponse
 
@@ -866,24 +870,10 @@ def administration():
     return render_template(
         "administration.html",
         active_page="administration",
-        modules=modules.liste(),
         utilisateurs=lectures.liste_utilisateurs(),
         roles_disponibles=lectures.liste_roles(modules.actif("serveur")),
         id_courant=utilisateur_courant(),
     )
-
-
-@app.route("/administration/modules", methods=["POST"])
-def administration_modules():
-    cle = request.form.get("cle")
-    actif = request.form.get("actif") == "1"
-
-    resultat = modules.basculer(cle, actif)
-    if not resultat["success"]:
-        return jsonify(resultat), 400
-
-    etat = "activée" if actif else "désactivée"
-    return jsonify({**resultat, "message": f"Fonctionnalité {etat}"})
 
 
 @app.route("/administration/utilisateurs", methods=["POST"])
@@ -992,6 +982,32 @@ def plateforme_actif(id_etablissement):
         return jsonify(resultat), 400
     message = "Établissement rouvert" if actif else "Établissement suspendu"
     return jsonify({**resultat, "message": message})
+
+
+@app.route("/plateforme/<int:id_etablissement>/modules", methods=["GET", "POST"])
+def plateforme_modules(id_etablissement):
+    """Les fonctionnalités d'un établissement, décidées par l'éditeur.
+
+    C'est ici et non sur la page Administration du maquis : ce que l'on souscrit
+    ne se donne pas soi-même.
+    """
+    if not etablissement.par_id(id_etablissement):
+        return jsonify({"success": False, "error": "Établissement introuvable"}), 404
+
+    if request.method == "GET":
+        return jsonify({"data": modules.liste(id_etablissement)})
+
+    actif = request.form.get("actif") == "1"
+    resultat = modules.basculer(request.form.get("cle"), actif, id_etablissement)
+    if not resultat["success"]:
+        return jsonify(resultat), 400
+
+    # Le gérant doit pouvoir constater dans son journal pourquoi une page a
+    # disparu de son menu : la trace va chez lui, pas chez l'éditeur.
+    g.journal_etablissement = id_etablissement
+
+    etat = "activée" if actif else "désactivée"
+    return jsonify({**resultat, "message": f"Fonctionnalité {etat}"})
 
 
 if __name__ == "__main__":

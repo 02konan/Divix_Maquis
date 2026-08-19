@@ -81,9 +81,23 @@ chiffrées, qu'un nom ne trahirait pas.
   ne peut entrer.
 - **Console plateforme** — le rôle **Administrateur plateforme** dispose de la page
   `/plateforme` : tous les établissements, leur nombre de comptes, de commandes et
-  leur encaissé, avec de quoi en créer et en suspendre. Ce compte n'appartient à
-  aucun maquis, donc aucune page de service ne s'ouvre pour lui — et le rôle n'est
-  jamais proposé dans la gestion des comptes d'un établissement.
+  leur encaissé, avec de quoi en créer, en suspendre, et régler les fonctionnalités
+  de chacun. Ce compte n'appartient à aucun maquis, donc aucune page de service ne
+  s'ouvre pour lui — et le rôle n'est jamais proposé dans la gestion des comptes
+  d'un établissement.
+
+Ce dernier point ferme la porte au gérant, mais aussi à vous : **le premier compte
+plateforme se crée en dehors du logiciel**, avec le script prévu pour ça, à lancer
+une fois depuis le shell de l'hébergeur.
+
+```bash
+python outils/creer_compte_plateforme.py
+```
+
+Il demande le nom, l'adresse et le mot de passe — ce dernier au clavier plutôt qu'en
+argument, qui resterait dans l'historique du shell et dans la liste des processus. Le
+compte créé n'appartient à aucun établissement, ce qui lui ferme toutes les pages de
+service et n'ouvre que la console.
 
 Suspendre un établissement ferme la connexion à tout son personnel, message à
 l'appui, sans rien supprimer : le rouvrir rend l'accès tel quel.
@@ -105,8 +119,11 @@ lui qui désigne l'établissement.
 ## Fonctionnalités activables
 
 Tous les maquis n'ont pas les mêmes besoins : un service au comptoir n'a que faire
-d'un plan de salle. La page **Administration**, réservée au gérant, active ou
-désactive chaque fonctionnalité :
+d'un plan de salle. C'est **l'éditeur** qui décide, depuis la console
+`/plateforme` : chaque établissement y a un bouton *Fonctionnalités* qui ouvre ses
+interrupteurs. Le gérant ne se les donne pas lui-même — ce que l'on souscrit ne se
+donne pas soi-même —, sa page Administration ne porte plus que les comptes du
+personnel.
 
 | Fonctionnalité | Désactivable |
 |----------------|--------------|
@@ -131,6 +148,10 @@ saisies sont conservées et réapparaissent telles quelles à la réactivation.
 Désactiver la gestion de salle retire aussi le choix de table dans la prise de
 commande — une table envoyée par un formulaire forgé est ignorée — et remplace la
 carte « Tables occupées » du tableau de bord par le reste à encaisser.
+
+Un basculement laisse une trace dans le journal du maquis concerné — pas dans celui
+de l'éditeur : le gérant doit pouvoir constater pourquoi une page a disparu de son
+menu.
 
 Pour ajouter une fonctionnalité plus tard : la décrire dans `backend/modules.py`,
 écrire sa page, rattacher ses endpoints dans `backend/roles.py`. La ligne en base
@@ -240,6 +261,17 @@ Chaque article se **modifie** depuis sa carte — le bouton *Modifier* rouvre le
 formulaire prérempli. Le stock n'y est volontairement pas modifiable : il ne bouge que
 par un mouvement enregistré dans la page Stock, pour que l'inventaire garde une trace.
 
+### Sur téléphone
+
+Safari iOS agrandit la page dès qu'on touche un champ dont le texte fait moins de
+16 px — et ne la réduit pas en sortant. Le thème descend à 13 px : le logiciel
+sautait donc à chaque saisie. Les champs passent à 16 px sous 992 px de large
+(`static/css/maquis.css`), ce qui suffit à l'éviter.
+
+Pas de `user-scalable=no` dans la balise viewport : cela réglerait le symptôme en
+interdisant aussi le zoom à deux doigts, dont certains ont besoin pour lire. Un test
+refuse qu'on l'ajoute.
+
 ### Champs masqués
 
 Deux champs sont retirés des formulaires pour l'instant, commentés sur place et prêts
@@ -324,6 +356,9 @@ divix_maquis/
 │   ├── lectures.py         toutes les lectures (listes, compteurs, dashboard)
 │   └── ecritures.py        toutes les écritures (commandes, caisse, stock, dépenses)
 ├── donnees_demo.py         initialisation + jeu de démonstration
+├── outils/                 scripts hors application
+│   ├── creer_compte_plateforme.py   le compte de l'éditeur, incréable depuis l'interface
+│   └── generer_icones.py            régénère les icônes embarquées
 ├── templates/              interface reprise de Divix SysPaie
 │   └── carte.html          servie par /maquis et par /menu
 ├── static/css/             admin.css, login.css, table-mobile.css (identiques) + maquis.css

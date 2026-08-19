@@ -31,7 +31,7 @@ LIBELLES = {
     "stock_mouvement": "Mouvement de stock",
     "caisse_add": "Encaissement",
     "depense_add": "Dépense enregistrée",
-    "administration_modules": "Fonctionnalité basculée",
+    "plateforme_modules": "Fonctionnalité basculée par l'éditeur",
     "administration_utilisateur_add": "Compte créé",
     "administration_utilisateur_actif": "Compte activé ou désactivé",
     "administration_utilisateur_role": "Rôle d'un compte modifié",
@@ -65,14 +65,18 @@ def resumer(formulaire):
     return resume[:LONGUEUR_DETAILS] or None
 
 
-def enregistrer(action, utilisateur, cible=None, details=None):
-    """Pose une ligne dans le journal de l'établissement courant.
+def enregistrer(action, utilisateur, cible=None, details=None, id_etablissement=None):
+    """Pose une ligne dans le journal d'un établissement.
+
+    Celui du contexte par défaut. L'éditeur, qui n'appartient à aucun maquis,
+    désigne explicitement celui qu'il touche : le gérant doit pouvoir constater
+    dans son propre journal pourquoi une page a disparu de son menu.
 
     Ne lève jamais : une action réussie ne doit pas être annoncée comme
     échouée parce que sa trace n'a pas pu s'écrire. L'échec part dans les
     journaux techniques, où il reste trouvable.
     """
-    id_etablissement = courant_ou_none()
+    id_etablissement = id_etablissement or courant_ou_none()
     if id_etablissement is None or not journalisable(action):
         return
 

@@ -36,19 +36,98 @@ function afficherEtablissements(etablissements) {
                 </span>
             </td>
             <td data-label="Action">
-                <button class="btn btn-sm ${ets.actif ? 'btn-outline-danger' : 'btn-outline-success'} bascule-etablissement"
-                        data-id="${ets.id}" data-actif="${ets.actif ? '0' : '1'}"
-                        data-nom="${Divix.echapper(ets.nom)}">
-                    ${ets.actif ? 'Suspendre' : 'Rouvrir'}
-                </button>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-secondary ouvrir-modules"
+                            data-id="${ets.id}" data-nom="${Divix.echapper(ets.nom)}">
+                        Fonctionnalités
+                    </button>
+                    <button class="btn btn-sm ${ets.actif ? 'btn-outline-danger' : 'btn-outline-success'} bascule-etablissement"
+                            data-id="${ets.id}" data-actif="${ets.actif ? '0' : '1'}"
+                            data-nom="${Divix.echapper(ets.nom)}">
+                        ${ets.actif ? 'Suspendre' : 'Rouvrir'}
+                    </button>
+                </div>
             </td>
         </tr>`).join('');
 
     document.querySelectorAll('.bascule-etablissement').forEach((bouton) => {
         bouton.addEventListener('click', () => basculer(bouton));
     });
+    document.querySelectorAll('.ouvrir-modules').forEach((bouton) => {
+        bouton.addEventListener('click', () => ouvrirModules(bouton.dataset));
+    });
 
     appliquerFiltresPlateforme?.();
+}
+
+/* ------------------------------------------------------------------ */
+/* Fonctionnalités d'un établissement                                  */
+/* ------------------------------------------------------------------ */
+
+async function ouvrirModules({ id, nom }) {
+    document.getElementById('modulesEtablissement').textContent = nom;
+    Divix.chargement('tbody-modules', 3);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modulesModal')).show();
+
+    try {
+        const reponse = await Divix.charger(`/plateforme/${id}/modules`);
+        afficherModules(id, reponse.data || []);
+    } catch (erreur) {
+        console.error(erreur);
+        Divix.vide('tbody-modules', 'Impossible de charger les fonctionnalités', 3);
+    }
+}
+
+function afficherModules(id, modules) {
+    document.getElementById('tbody-modules').innerHTML = modules.map((module) => `
+        <tr>
+            <td data-label="Fonctionnalité">
+                <span class="fw-semibold">${Divix.echapper(module.libelle)}</span>
+                ${module.obligatoire
+                    ? '<span class="badge badge-success ms-1">Indispensable</span>'
+                    : ''}
+            </td>
+            <td data-label="Description">
+                <span class="small text-muted">${Divix.echapper(module.description)}</span>
+            </td>
+            <td data-label="État" class="text-center">
+                <div class="form-check form-switch d-inline-block m-0">
+                    <input class="form-check-input bascule-module" type="checkbox" role="switch"
+                           data-cle="${module.cle}" ${module.actif ? 'checked' : ''}
+                           ${module.obligatoire ? 'disabled' : ''}>
+                </div>
+            </td>
+        </tr>`).join('');
+
+    document.querySelectorAll('.bascule-module').forEach((interrupteur) => {
+        interrupteur.addEventListener('change', () => basculerModule(id, interrupteur));
+    });
+}
+
+async function basculerModule(id, interrupteur) {
+    const actif = interrupteur.checked;
+    interrupteur.disabled = true;
+
+    try {
+        const reponse = await Divix.envoyer(`/plateforme/${id}/modules`, {
+            cle: interrupteur.dataset.cle,
+            actif: actif ? '1' : '0'
+        });
+        if (!reponse.success) {
+            // L'interrupteur revient où il était : il ne doit pas montrer un
+            // état que la base n'a pas enregistré.
+            interrupteur.checked = !actif;
+            Divix.erreur(reponse.error || 'Modification impossible');
+            return;
+        }
+        Divix.succes(reponse.message);
+    } catch (erreur) {
+        console.error(erreur);
+        interrupteur.checked = !actif;
+        Divix.erreur('Modification impossible');
+    } finally {
+        interrupteur.disabled = false;
+    }
 }
 
 async function basculer(bouton) {

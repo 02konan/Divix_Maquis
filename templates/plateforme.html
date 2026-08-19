@@ -2,6 +2,48 @@
 {% block title %}Établissements - Divix Maquis{% endblock %}
 {% block subtitle %}Établissements{% endblock %}
 {% block content %}
+<div class="modal fade" id="modulesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="icon me-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4"></path><path d="m21 12 1.5-2.6-2.2-1.3a8.3 8.3 0 0 0-1-1.7l.6-2.5-2.6-1.5-1.7 1.9a8.3 8.3 0 0 0-2 0L11.9 2 9.3 3.5l.6 2.5c-.4.5-.7 1.1-1 1.7l-2.4.6L5 10.9l1.9 1.7a8.3 8.3 0 0 0 0 2L5 16.3l1.5 2.6 2.5-.6c.5.4 1.1.7 1.7 1l.6 2.4h3l.6-2.4c.6-.3 1.2-.6 1.7-1l2.5.6 1.5-2.6-1.9-1.7a8.3 8.3 0 0 0 0-2z"></path>
+            </svg>
+        </div>
+        <div>
+            <h1 class="modal-title fs-5">Fonctionnalités</h1>
+            <span class="small text-muted" id="modulesEtablissement"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">
+            Activez ce à quoi cet établissement a droit. Une fonctionnalité désactivée
+            disparaît de son menu et ses pages deviennent inaccessibles, pour tout le
+            monde chez lui — gérant compris. Les données déjà saisies sont conservées
+            et réapparaissent telles quelles à la réactivation.
+        </p>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr class="table-light">
+                        <th class="text-muted" scope="col">FONCTIONNALITÉ</th>
+                        <th class="text-muted" scope="col">DESCRIPTION</th>
+                        <th class="text-muted text-center" scope="col">ÉTAT</th>
+                    </tr>
+                </thead>
+                <tbody class="result" id="tbody-modules"></tbody>
+            </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="etablissementModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">

@@ -499,12 +499,26 @@ def test_role_inconnu_n_a_acces_a_rien(app_maquis):
 # ----------------------------------------------------------------------------
 
 
-def _desactiver(client, cle):
-    reponse = client.post(
-        "/administration/modules", data={"cle": cle, "actif": "0"}
-    ).get_json()
-    assert reponse["success"] is True
+def _basculer_module(app_maquis, cle, actif):
+    """Règle une fonctionnalité comme le fait l'éditeur, depuis sa console.
+
+    Un gérant ne peut plus le faire lui-même : ce que l'on souscrit ne se donne
+    pas soi-même.
+    """
+    id_etablissement = _cadrer()
+    editeur = _connecte_en(app_maquis, "Administrateur plateforme")
+    reponse = editeur.post(
+        f"/plateforme/{id_etablissement}/modules",
+        data={"cle": cle, "actif": "1" if actif else "0"},
+    )
+    _cadrer()
     return reponse
+
+
+def _desactiver(app_maquis, cle):
+    reponse = _basculer_module(app_maquis, cle, False)
+    assert reponse.get_json()["success"] is True
+    return reponse.get_json()
 
 
 def test_administration_reservee_au_gerant(app_maquis):
@@ -514,14 +528,16 @@ def test_administration_reservee_au_gerant(app_maquis):
         client = _connecte_en(app_maquis, role)
         assert client.get("/administration").status_code == 302
         refus = client.post(
-            "/administration/modules", data={"cle": "salle", "actif": "0"}
+            "/administration/utilisateurs",
+            data={"nom": "Z", "email": "z@z.ci", "mot_de_passe": "zzzzzz",
+                  "id_role": "1"},
         )
         assert refus.status_code == 403
 
 
 def test_salle_desactivee_ferme_pages_et_donnees(app_maquis):
     client = _connecte_en(app_maquis, "Gérant")
-    _desactiver(client, "salle")
+    _desactiver(app_maquis, "salle")
 
     assert client.get("/salle").status_code == 302
     refus = client.get("/salle/list")
@@ -539,14 +555,14 @@ def test_salle_desactivee_retire_le_choix_de_table(app_maquis):
     client = _connecte_en(app_maquis, "Gérant")
     assert 'id="idTable"' in client.get("/commande").get_data(as_text=True)
 
-    _desactiver(client, "salle")
+    _desactiver(app_maquis, "salle")
     assert 'id="idTable"' not in client.get("/commande").get_data(as_text=True)
 
 
 def test_salle_desactivee_ignore_la_table_envoyee(app_maquis):
     """Un formulaire forgé ne doit pas rattacher une commande à une table."""
     client = _connecte_en(app_maquis, "Gérant")
-    _desactiver(client, "salle")
+    _desactiver(app_maquis, "salle")
 
     article = client.get("/menu/disponibles").get_json()["data"][0]
     creation = client.post(
@@ -566,29 +582,24 @@ def test_salle_desactivee_ignore_la_table_envoyee(app_maquis):
 def test_module_indispensable_reste_actif(app_maquis):
     from backend import modules
 
-    client = _connecte_en(app_maquis, "Gérant")
     for cle in modules.OBLIGATOIRES:
-        refus = client.post(
-            "/administration/modules", data={"cle": cle, "actif": "0"}
-        )
+        refus = _basculer_module(app_maquis, cle, False)
         assert refus.status_code == 400
         assert "ne peut pas être désactivé" in refus.get_json()["error"]
-        assert client.get("/caisse").status_code == 200
+    assert _connecte_en(app_maquis, "Gérant").get("/caisse").status_code == 200
 
 
 def test_module_inconnu_refuse(app_maquis):
-    refus = _connecte_en(app_maquis, "Gérant").post(
-        "/administration/modules", data={"cle": "karaoke", "actif": "1"}
-    )
-    assert refus.status_code == 400
+    assert _basculer_module(app_maquis, "karaoke", True).status_code == 400
 
 
 def test_reactivation_reouvre_la_fonctionnalite(app_maquis):
+    _desactiver(app_maquis, "stock")
     client = _connecte_en(app_maquis, "Gérant")
-    _desactiver(client, "stock")
     assert client.get("/stock/list").status_code == 403
 
-    client.post("/administration/modules", data={"cle": "stock", "actif": "1"})
+    _basculer_module(app_maquis, "stock", True)
+    client = _connecte_en(app_maquis, "Gérant")
     assert client.get("/stock/list").status_code == 200
     assert 'href="/stock"' in client.get("/stock").get_data(as_text=True)
 
@@ -1467,13 +1478,8 @@ def test_etablissement_suspendu_ferme_la_porte(app_maquis):
 
 
 def _couper_les_serveurs(app_maquis):
-    gerant = _connecte_en(app_maquis, "Gérant")
-    reponse = gerant.post(
-        "/administration/modules", data={"cle": "serveur", "actif": "0"}
-    )
-    assert reponse.get_json()["success"] is True
-    _cadrer()
-    return gerant
+    assert _basculer_module(app_maquis, "serveur", False).get_json()["success"] is True
+    return _connecte_en(app_maquis, "Gérant")
 
 
 def test_serveurs_coupes_refusent_la_connexion(app_maquis):
@@ -1513,10 +1519,8 @@ def test_serveurs_coupes_retirent_les_roles_de_la_liste(app_maquis):
 
 def test_serveurs_rendus_rouvrent_les_comptes(app_maquis):
     """Rien n'est supprimé : réactiver la fonctionnalité rend l'accès tel quel."""
-    gerant = _couper_les_serveurs(app_maquis)
-    assert gerant.post(
-        "/administration/modules", data={"cle": "serveur", "actif": "1"}
-    ).get_json()["success"] is True
+    _couper_les_serveurs(app_maquis)
+    assert _basculer_module(app_maquis, "serveur", True).get_json()["success"] is True
 
     assert app_maquis.test_client().post(
         "/login", data={"email": "bar@divixmaquis.ci", "password": "bar123"}
@@ -1882,3 +1886,114 @@ def test_le_rafraichissement_est_muet():
     # Les deux pages qui posent leur propre indicateur le taisent aussi.
     for nom in ("carte.js", "salle.js"):
         assert "Divix.silencieux()" in _script(nom), nom
+
+
+# ----------------------------------------------------------------------------
+# LES FONCTIONNALITÉS SE RÈGLENT DEPUIS LA CONSOLE DE L'ÉDITEUR
+# ----------------------------------------------------------------------------
+
+
+def test_le_gerant_ne_regle_plus_les_fonctionnalites(app_maquis):
+    """Ce que l'on souscrit ne se donne pas soi-même."""
+    maison = _cadrer()
+    gerant = _connecte_en(app_maquis, "Gérant")
+
+    page = gerant.get("/administration").get_data(as_text=True)
+    assert "bascule-module" not in page
+    assert "Fonctionnalités" not in page
+
+    # L'URL de l'éditeur lui est fermée, formulaire forgé compris.
+    assert gerant.post(
+        f"/plateforme/{maison}/modules", data={"cle": "salle", "actif": "0"}
+    ).status_code == 403
+    # Et l'ancienne route n'existe plus du tout.
+    assert gerant.post(
+        "/administration/modules", data={"cle": "salle", "actif": "0"}
+    ).status_code == 404
+
+
+def test_l_editeur_regle_les_fonctionnalites_de_chaque_maquis(app_maquis):
+    from backend import etablissement, modules
+
+    maison = _cadrer()
+    voisin = _peupler_voisin()["id"]
+    editeur = _connecte_en(app_maquis, "Administrateur plateforme")
+
+    assert editeur.post(
+        f"/plateforme/{voisin}/modules", data={"cle": "stock", "actif": "0"}
+    ).get_json()["success"] is True
+
+    # Le voisin perd la page, la maison la garde : chacun ses fonctionnalités.
+    etablissement.definir(voisin)
+    assert modules.actif("stock") is False
+    etablissement.definir(maison)
+    assert modules.actif("stock") is True
+    assert _connecte_en(app_maquis, "Gérant").get("/stock").status_code == 200
+
+
+def test_l_editeur_lit_les_fonctionnalites_avant_de_les_regler(app_maquis):
+    from backend import modules
+
+    maison = _cadrer()
+    editeur = _connecte_en(app_maquis, "Administrateur plateforme")
+
+    donnees = editeur.get(f"/plateforme/{maison}/modules").get_json()["data"]
+    assert {module["cle"] for module in donnees} == modules.CLES
+    assert all(module["actif"] for module in donnees)
+
+    assert editeur.get("/plateforme/9999/modules").status_code == 404
+
+
+def test_le_gerant_voit_dans_son_journal_ce_que_l_editeur_a_coupe(app_maquis):
+    """Une page disparue du menu doit avoir une explication quelque part."""
+    from backend import journal
+
+    maison = _cadrer()
+    editeur = _connecte_en(app_maquis, "Administrateur plateforme")
+    assert editeur.post(
+        f"/plateforme/{maison}/modules", data={"cle": "depense", "actif": "0"}
+    ).get_json()["success"] is True
+
+    _cadrer()
+    trace = journal.liste()[0]
+    assert trace["libelle"] == "Fonctionnalité basculée par l'éditeur"
+    assert trace["nom_utilisateur"] == "Support Divix"
+    assert trace["cible"] == "depense"
+
+
+# ----------------------------------------------------------------------------
+# COMPTE PLATEFORME ET CONFORT MOBILE
+# ----------------------------------------------------------------------------
+
+
+def test_le_script_de_creation_du_compte_plateforme_existe():
+    """La seule porte d'entrée pour l'éditeur : elle ne doit pas disparaître."""
+    script = (RACINE / "outils" / "creer_compte_plateforme.py").read_text(
+        encoding="utf-8"
+    )
+    # Le mot de passe se demande, il ne se passe pas en argument : la ligne de
+    # commande reste dans l'historique du shell et la liste des processus.
+    assert "getpass" in script
+    assert "--mot-de-passe" not in script
+    # Le compte ne doit appartenir à aucun établissement.
+    assert "ligne[\"id\"], None)" in script
+
+
+def test_les_champs_ne_declenchent_pas_le_zoom_sur_telephone():
+    """Safari iOS zoome sur tout champ dont le texte fait moins de 16 px.
+
+    Le thème descend à 13 px : sans cette règle, le logiciel saute à chaque
+    saisie sur téléphone, et ne redescend pas.
+    """
+    css = (RACINE / "static" / "css" / "maquis.css").read_text(encoding="utf-8")
+    bloc = css[css.index("Pas de zoom automatique"):]
+    assert "font-size: 16px;" in bloc
+    for champ in (".form-control", ".form-select", "input", "select", "textarea"):
+        assert champ in bloc, champ
+
+    # Interdire le zoom à deux doigts réglerait le symptôme au prix de
+    # l'accessibilité : personne ne doit être empêché d'agrandir la page.
+    for gabarit in ("header.html", "login.html", "inscription.html"):
+        entete = (RACINE / "templates" / gabarit).read_text(encoding="utf-8")
+        assert "user-scalable=no" not in entete, gabarit
+        assert "maximum-scale" not in entete, gabarit

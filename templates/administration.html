@@ -4,65 +4,6 @@
 {% block content %}
 <div class="row g-3">
     <div class="col-12">
-        <div class="card feature-card border-0 shadow-sm p-3">
-            <div class="d-flex align-items-center gap-2">
-                <div class="icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4"></path><path d="m21 12 1.5-2.6-2.2-1.3a8.3 8.3 0 0 0-1-1.7l.6-2.5-2.6-1.5-1.7 1.9a8.3 8.3 0 0 0-2 0L11.9 2 9.3 3.5l.6 2.5c-.4.5-.7 1.1-1 1.7l-2.4.6L5 10.9l1.9 1.7a8.3 8.3 0 0 0 0 2L5 16.3l1.5 2.6 2.5-.6c.5.4 1.1.7 1.7 1l.6 2.4h3l.6-2.4c.6-.3 1.2-.6 1.7-1l2.5.6 1.5-2.6-1.9-1.7a8.3 8.3 0 0 0 0-2z"></path>
-                    </svg>
-                </div>
-                <div>
-                    <h2 class="h6 mb-0">Fonctionnalités</h2>
-                    <span class="small text-muted">
-                        Activez uniquement ce dont le maquis a besoin. Une fonctionnalité
-                        désactivée disparaît du menu et ses pages deviennent inaccessibles,
-                        pour tout le monde. Les données déjà saisies sont conservées.
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12">
-        <div class="card feature-card result-table border-0 shadow-sm p-3">
-            <div class="table-responsive">
-                <table class="table align-middle">
-                    <thead>
-                        <tr class="table-light">
-                            <th class="text-muted" scope="col">FONCTIONNALITÉ</th>
-                            <th class="text-muted" scope="col">DESCRIPTION</th>
-                            <th class="text-muted text-center" scope="col">ÉTAT</th>
-                        </tr>
-                    </thead>
-                    <tbody class="result">
-                        {% for module in modules %}
-                        <tr>
-                            <td data-label="Fonctionnalité">
-                                <span class="fw-semibold">{{ module.libelle }}</span>
-                                {% if module.obligatoire %}
-                                <span class="badge badge-success ms-1">Indispensable</span>
-                                {% endif %}
-                            </td>
-                            <td data-label="Description">
-                                <span class="small text-muted">{{ module.description }}</span>
-                            </td>
-                            <td data-label="État" class="text-center">
-                                <div class="form-check form-switch d-inline-block m-0">
-                                    <input class="form-check-input bascule-module" type="checkbox"
-                                           role="switch" id="module-{{ module.cle }}"
-                                           data-cle="{{ module.cle }}"
-                                           {% if module.actif %}checked{% endif %}
-                                           {% if module.obligatoire %}disabled{% endif %}>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div class="col-12">
         <div class="card feature-card result-table border-0 shadow-sm p-3">
             <div class="d-flex w-100 align-items-center">
                 <div class="d-flex align-items-center gap-2">
