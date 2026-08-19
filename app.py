@@ -1,12 +1,14 @@
 
 import json
 import os
+import secrets
 import time
 from datetime import timedelta
 
 from dotenv import load_dotenv
 from flask import (
     Flask,
+    abort,
     g,
     jsonify,
     redirect,
@@ -20,8 +22,14 @@ from flask_login import LoginManager, current_user
 from werkzeug.utils import secure_filename
 
 from backend import ecritures, etablissement, journal, lectures, modules, roles
-from backend.auth import authentifier, utilisateur_par_id
-from backend.database import initialiser_base
+from backend.auth import (
+    authentifier,
+    compte_plateforme_existe,
+    creer_utilisateur,
+    utilisateur_par_id,
+)
+from backend.database import initialiser_base, lire_un, message_erreur
+from backend.database import journal as journal_technique
 from backend.models import User
 
 load_dotenv()
@@ -239,6 +247,86 @@ def refuser_connexion(utilisateur):
             "Voyez avec votre gérant."
         )
     return None
+
+
+# Le compte de l'éditeur ouvre la console qui voit tous les établissements, les
+# suspend et règle leurs fonctionnalités : le formulaire qui le crée est donc le
+# point le plus sensible du logiciel. Deux verrous, chacun suffisant seul :
+#
+#   - il faut connaître CLE_SUPPORT, un secret posé dans l'environnement. Sans
+#     cette variable, la page n'existe pas du tout ;
+#   - il se referme dès qu'un compte plateforme existe. C'est une porte d'entrée
+#     pour une plateforme neuve, pas une page de création de comptes.
+#
+# Les suivants se créent avec `outils/creer_compte_plateforme.py`, qui suppose
+# un accès à la machine ou à la base.
+LONGUEUR_MOT_DE_PASSE_SUPPORT = 10
+
+
+def cle_support():
+    return os.getenv("CLE_SUPPORT") or ""
+
+
+def support_ouvert():
+    return bool(cle_support()) and not compte_plateforme_existe()
+
+
+@app.route("/support", methods=["GET", "POST"])
+def support():
+    """Enregistre le compte de l'éditeur, une fois, sur une plateforme neuve."""
+    if not support_ouvert():
+        # 404 plutôt qu'un refus explicite : inutile d'annoncer qu'une porte
+        # existe ici à qui n'a rien à y faire.
+        abort(404)
+
+    if request.method == "GET":
+        return render_template("support.html")
+
+    nom = (request.form.get("nom") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    mot_de_passe = request.form.get("mot_de_passe") or ""
+
+    # compare_digest plutôt que « == » : la comparaison ne s'arrête pas au
+    # premier caractère faux, on ne peut donc pas deviner la clé lettre à lettre
+    # en mesurant le temps de réponse.
+    if not secrets.compare_digest(request.form.get("cle") or "", cle_support()):
+        journal_technique.warning(
+            "Enregistrement du support refusé : clé invalide (%s)", request.remote_addr
+        )
+        return jsonify({"success": False, "error": "Clé d'accès invalide"}), 403
+
+    if not nom or not email:
+        return jsonify({"success": False, "error": "Nom et email obligatoires"}), 400
+    if len(mot_de_passe) < LONGUEUR_MOT_DE_PASSE_SUPPORT:
+        return jsonify(
+            {
+                "success": False,
+                "error": f"Le mot de passe doit faire au moins "
+                f"{LONGUEUR_MOT_DE_PASSE_SUPPORT} caractères : ce compte voit "
+                f"tous les établissements.",
+            }
+        ), 400
+
+    ligne = lire_un("SELECT id FROM roles WHERE nom = %s", (roles.ROLE_PLATEFORME,))
+    if not ligne:
+        return jsonify(
+            {"success": False, "error": "Le rôle plateforme est absent de la base"}
+        ), 500
+
+    try:
+        # id_etablissement à None : ce compte n'appartient à aucun maquis.
+        creer_utilisateur(nom, email, mot_de_passe, ligne["id"], None)
+    except Exception as erreur:  # noqa: BLE001
+        return jsonify({"success": False, "error": message_erreur(erreur)}), 400
+
+    journal_technique.warning("Compte plateforme enregistré pour %s", email)
+    return jsonify(
+        {
+            "success": True,
+            "message": "Compte créé. Vous pouvez retirer CLE_SUPPORT.",
+            "redirect": url_for("login"),
+        }
+    )
 
 
 @app.route("/inscription", methods=["GET", "POST"])

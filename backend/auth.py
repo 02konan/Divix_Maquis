@@ -37,6 +37,22 @@ def utilisateur_par_id(id_utilisateur):
     return ligne
 
 
+def compte_plateforme_existe():
+    """Un compte de l'éditeur a-t-il déjà été créé ?
+
+    Sert à refermer le formulaire d'enregistrement du support : il n'a de raison
+    d'être qu'une fois, le temps d'entrer dans une plateforme neuve.
+    """
+    from backend.roles import ROLE_PLATEFORME
+
+    return lire_un(
+        """SELECT u.id FROM utilisateurs u
+           JOIN roles r ON u.id_role = r.id
+           WHERE r.nom = %s""",
+        (ROLE_PLATEFORME,),
+    ) is not None
+
+
 def creer_utilisateur(nom, email, mot_de_passe, id_role, id_etablissement):
     return executer(
         """INSERT INTO utilisateurs (nom, email, mot_de_passe, id_role, id_etablissement)

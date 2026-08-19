@@ -36,6 +36,7 @@ droit de créer une base. Connexion configurée par variables d'environnement :
 | `DATABASE`          | `divix_maquis` | Nom de la base |
 | `MYSQL_UNIX_SOCKET` | —              | Socket Unix, au lieu d'une connexion TCP |
 | `PORT`              | `5000`         | Port d'écoute de l'application |
+| `CLE_SUPPORT`       | —              | Ouvre `/support` le temps de créer le compte de l'éditeur (voir plus bas). Sans elle, la page n'existe pas |
 
 Comptes de démonstration :
 
@@ -87,17 +88,42 @@ chiffrées, qu'un nom ne trahirait pas.
   d'un établissement.
 
 Ce dernier point ferme la porte au gérant, mais aussi à vous : **le premier compte
-plateforme se crée en dehors du logiciel**, avec le script prévu pour ça, à lancer
-une fois depuis le shell de l'hébergeur.
+plateforme se crée en dehors de l'interface courante.** Deux chemins.
+
+### Le formulaire `/support`
+
+Le plus simple sur un hébergeur : posez une variable d'environnement `CLE_SUPPORT`
+avec un secret de votre choix, redémarrez le service, ouvrez `/support`, entrez la
+clé et vos identifiants. Puis retirez la variable.
+
+C'est le point le plus sensible du logiciel — ce compte voit tous les établissements,
+les suspend et règle leurs fonctionnalités. Deux verrous le gardent, chacun suffisant
+seul :
+
+- **sans `CLE_SUPPORT`, la page n'existe pas.** Pas un refus poli : un `404`, qui
+  n'annonce même pas qu'une porte se trouve là ;
+- **elle se referme dès qu'un compte plateforme existe.** C'est une porte d'entrée
+  pour une plateforme neuve, pas une page de création de comptes.
+
+La clé est comparée avec `secrets.compare_digest` : la comparaison ne s'arrête pas au
+premier caractère faux, on ne peut donc pas la deviner lettre à lettre en mesurant le
+temps de réponse. Le mot de passe doit faire au moins 10 caractères, contre 6 pour le
+personnel d'un maquis. Réussites et échecs partent dans les journaux techniques, avec
+l'adresse d'origine.
+
+### Le script, quand on a la main sur la machine
 
 ```bash
 python outils/creer_compte_plateforme.py
 ```
 
 Il demande le nom, l'adresse et le mot de passe — ce dernier au clavier plutôt qu'en
-argument, qui resterait dans l'historique du shell et dans la liste des processus. Le
-compte créé n'appartient à aucun établissement, ce qui lui ferme toutes les pages de
-service et n'ouvre que la console.
+argument, qui resterait dans l'historique du shell et dans la liste des processus.
+C'est aussi par lui que passent les comptes support **suivants**, une fois `/support`
+refermé.
+
+Dans les deux cas le compte créé n'appartient à aucun établissement, ce qui lui ferme
+toutes les pages de service et n'ouvre que la console.
 
 Suspendre un établissement ferme la connexion à tout son personnel, message à
 l'appui, sans rien supprimer : le rouvrir rend l'accès tel quel.
@@ -357,7 +383,7 @@ divix_maquis/
 │   └── ecritures.py        toutes les écritures (commandes, caisse, stock, dépenses)
 ├── donnees_demo.py         initialisation + jeu de démonstration
 ├── outils/                 scripts hors application
-│   ├── creer_compte_plateforme.py   le compte de l'éditeur, incréable depuis l'interface
+│   ├── creer_compte_plateforme.py   le compte de l'éditeur, hors interface courante
 │   └── generer_icones.py            régénère les icônes embarquées
 ├── templates/              interface reprise de Divix SysPaie
 │   └── carte.html          servie par /maquis et par /menu
