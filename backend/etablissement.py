@@ -10,9 +10,29 @@ rattachée est un bug, pas une lecture sur tout le monde.
 
 from contextvars import ContextVar
 
-from backend.database import executer, lire_tout, lire_un, message_erreur
+from backend.database import (
+    connexion,
+    executer,
+    lire_tout,
+    lire_un,
+    message_erreur,
+)
 
 _courant = ContextVar("id_etablissement", default=None)
+
+# Un établissement neuf part avec la structure de carte d'un maquis ivoirien.
+# Sans elle, le gérant tombe sur une carte vide et doit inventer ses rubriques
+# avant de pouvoir saisir le moindre article. Le partage Bar / Cuisine est celui
+# qui sépare la page Maquis de la page Menu ; les rubriques se renomment, se
+# suppriment et se complètent ensuite.
+CATEGORIES_PAR_DEFAUT = [
+    ("Grillades", "Cuisine"),
+    ("Plats & Sauces", "Cuisine"),
+    ("Accompagnements", "Cuisine"),
+    ("Bières", "Bar"),
+    ("Sucreries", "Bar"),
+    ("Eaux & Jus", "Bar"),
+]
 
 
 def definir(id_etablissement):
@@ -65,17 +85,31 @@ def par_id(id_etablissement):
 
 
 def creer(nom, ville=None, telephone=None):
-    """Crée l'établissement et lui donne son jeu de fonctionnalités par défaut."""
+    """Crée l'établissement, ses fonctionnalités et sa carte de départ.
+
+    Tout se fait dans la même transaction : un établissement à moitié équipé —
+    sans fonctionnalité ou sans catégorie — serait plus embêtant à rattraper
+    qu'une création franchement refusée.
+    """
     from backend import modules
 
     if not nom or not nom.strip():
         return {"success": False, "error": "Le nom de l'établissement est obligatoire"}
 
     try:
-        id_etablissement = executer(
-            "INSERT INTO etablissements (nom, ville, telephone) VALUES (%s, %s, %s)",
-            (nom.strip(), ville or None, telephone or None),
-        )
+        with connexion() as conn:
+            id_etablissement = conn.execute(
+                "INSERT INTO etablissements (nom, ville, telephone) VALUES (%s, %s, %s)",
+                (nom.strip(), ville or None, telephone or None),
+            ).lastrowid
+            conn.executemany(
+                "INSERT INTO categories (id_etablissement, nom, type) VALUES (%s, %s, %s)",
+                [
+                    (id_etablissement, categorie, type_categorie)
+                    for categorie, type_categorie in CATEGORIES_PAR_DEFAUT
+                ],
+            )
+            conn.commit()
         modules.initialiser(id_etablissement)
         return {"success": True, "id_etablissement": id_etablissement}
     except Exception as erreur:

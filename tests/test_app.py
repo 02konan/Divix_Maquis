@@ -10,13 +10,13 @@ sys.path.insert(0, str(RACINE))
 BASE_TEST = "divix_maquis_test"
 
 
-MODULES_APPLICATIFS = ("app", "donnees_demo")
+MODULES_APPLICATIFS = ("app", "donnees_demo", "jeu_de_donnees")
 
 
 def _decharger_modules():
     """Force la relecture de la configuration MySQL au prochain import.
 
-    `donnees_demo` doit en faire partie : sinon il garde une référence vers un
+    `jeu_de_donnees` doit en faire partie : sinon il garde une référence vers un
     ancien module `backend.database`, dont la connexion pointe sur une base que
     le test précédent a supprimée.
     """
@@ -56,7 +56,7 @@ def app_maquis():
 
     _supprimer_base()
 
-    from donnees_demo import peupler
+    from jeu_de_donnees import peupler
 
     peupler()
 
@@ -2088,3 +2088,95 @@ def test_le_formulaire_support_exige_un_mot_de_passe_solide(plateforme_vierge):
     )
     assert refus.status_code == 400
     assert "10 caractères" in refus.get_json()["error"]
+
+
+# ----------------------------------------------------------------------------
+# DONNÉES D'INSTALLATION
+# ----------------------------------------------------------------------------
+
+
+def test_l_installation_ne_pose_que_les_roles(app_maquis):
+    """`donnees_demo` prépare une base, il ne la meuble pas.
+
+    Le jeu de démonstration complet vit dans `tests/jeu_de_donnees.py` : un
+    maquis fictif n'a rien à faire dans la base d'un client.
+    """
+    import donnees_demo
+    from backend.database import valeur
+
+    source = (RACINE / "donnees_demo.py").read_text(encoding="utf-8")
+    for table in ("articles", "commandes", "paiements", "depenses",
+                  "tables_salle", "utilisateurs", "etablissements"):
+        assert f"INSERT INTO {table}" not in source, table
+
+    # Il se relance sans rien casser ni rien dupliquer.
+    avant = valeur("SELECT COUNT(*) FROM roles")
+    donnees_demo.peupler()
+    _cadrer()
+    assert valeur("SELECT COUNT(*) FROM roles") == avant
+
+
+def test_un_etablissement_neuf_a_sa_carte_de_depart(app_maquis):
+    """Sans catégorie, le gérant ne peut pas saisir le moindre article."""
+    from backend import etablissement, lectures
+
+    nouveau = etablissement.creer("Chez Awa", "Yamoussoukro")["id_etablissement"]
+    etablissement.definir(nouveau)
+
+    categories = {(c["nom"], c["type"]) for c in lectures.liste_categories()}
+    assert categories == set(etablissement.CATEGORIES_PAR_DEFAUT)
+
+    # Et elles se répartissent bien entre les deux cartes.
+    assert {c["nom"] for c in lectures.liste_categories(("Bar",))} == {
+        nom for nom, type_ in etablissement.CATEGORIES_PAR_DEFAUT if type_ == "Bar"
+    }
+    assert {c["nom"] for c in lectures.liste_categories(("Cuisine",))} == {
+        nom for nom, type_ in etablissement.CATEGORIES_PAR_DEFAUT if type_ == "Cuisine"
+    }
+
+
+def test_un_maquis_inscrit_peut_saisir_un_article_tout_de_suite(app_maquis):
+    """Le vrai bénéfice : on s'inscrit, on ouvre la carte, on ajoute un plat."""
+    client = app_maquis.test_client()
+    assert client.post(
+        "/inscription",
+        data={"etablissement": "Chez Awa", "nom": "Awa", "email": "awa@chezawa.ci",
+              "mot_de_passe": "awa12345"},
+    ).get_json()["success"] is True
+
+    gerant = app_maquis.test_client()
+    gerant.post("/login", data={"email": "awa@chezawa.ci", "password": "awa12345"})
+
+    categories = gerant.get("/menu").get_data(as_text=True)
+    assert "Grillades" in categories
+
+    from backend import etablissement, lectures
+
+    etablissement.definir(
+        next(e["id"] for e in etablissement.liste() if e["nom"] == "Chez Awa")
+    )
+    id_grillades = next(
+        c["id"] for c in lectures.liste_categories() if c["nom"] == "Grillades"
+    )
+    ajout = gerant.post(
+        "/menu/add",
+        data={"nom": "Poulet braisé", "categorie": id_grillades, "prix": "6000",
+              "gere_stock": "0"},
+    ).get_json()
+    assert ajout["success"] is True
+
+
+def test_les_modes_de_paiement_sont_les_memes_partout(app_maquis):
+    """Une liste fermée : ce que la caisse propose est ce que le serveur accepte."""
+    from backend import ecritures
+
+    caisse = _connecte_en(app_maquis, "Caissier").get("/caisse").get_data(as_text=True)
+    for mode in ecritures.MODES_PAIEMENT:
+        assert f">{mode}</option>" in caisse, mode
+
+    refus = _connecte_en(app_maquis, "Caissier").post(
+        "/caisse/add",
+        data={"reference": "CMD-0001", "montant": "500", "mode": "Bitcoin"},
+    )
+    assert refus.status_code == 400
+    assert "Mode de paiement invalide" in refus.get_json()["error"]

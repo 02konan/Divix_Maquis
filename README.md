@@ -16,9 +16,39 @@ source .venv/bin/activate          # Windows : .venv\Scripts\activate
 pip install -r requirements.txt
 
 # créer un fichier .env avec les variables ci-dessous
-python donnees_demo.py             # crée la base + un jeu de démonstration
+python donnees_demo.py             # crée la base et ses données de référence
 python app.py                      # http://127.0.0.1:5000
 ```
+
+Puis `/inscription` pour ouvrir un premier maquis, et `/support` pour le compte de
+l'éditeur.
+
+## Données d'installation
+
+`donnees_demo.py` n'installe **que ce dont le logiciel a besoin pour fonctionner** :
+ni maquis fictif, ni carte d'exemple, ni commandes inventées. Il se relance sans
+risque, il n'ajoute que ce qui manque.
+
+| Donnée | Où elle vit | Quand elle est posée |
+|--------|-------------|----------------------|
+| **Rôles** | `backend/roles.py` | À l'installation *et* à chaque démarrage, pour qu'un rôle ajouté par une mise à jour apparaisse dans les bases déjà en service |
+| **Catégories** | `backend/etablissement.py` | À la création de chaque établissement |
+| **Modes de paiement** | `backend/ecritures.py` | Portés par le code : une liste fermée, la même pour tout le monde |
+
+Les catégories appartiennent à un établissement, elles ne peuvent donc pas exister
+avant lui : chaque maquis reçoit sa carte de départ à sa création — Grillades, Plats
+& Sauces, Accompagnements côté cuisine, Bières, Sucreries, Eaux & Jus côté bar — qu'il
+vienne de `/inscription` ou de la console de l'éditeur. Elles se renomment, se
+suppriment et se complètent ensuite. Sans elles, le gérant tomberait sur une carte
+vide et devrait inventer ses rubriques avant de saisir le moindre article.
+
+Les modes de paiement ne sont pas en base : la caisse les propose depuis cette liste,
+et le serveur revérifie avec la même à l'encaissement — un mode inventé par un
+formulaire forgé est refusé.
+
+> Le jeu de démonstration complet — un maquis, sa carte, son personnel et trois
+> semaines de commandes — a déménagé dans `tests/jeu_de_donnees.py`. Les tests en ont
+> besoin ; la base d'un client, non.
 
 Pour le rechargement automatique pendant le développement : `FLASK_DEBUG=1 python app.py`
 (le mode debug est désactivé par défaut, il ouvrirait une console d'exécution à distance).
@@ -38,20 +68,12 @@ droit de créer une base. Connexion configurée par variables d'environnement :
 | `PORT`              | `5000`         | Port d'écoute de l'application |
 | `CLE_SUPPORT`       | —              | Ouvre `/support` le temps de créer le compte de l'éditeur (voir plus bas). Sans elle, la page n'existe pas |
 
-Comptes de démonstration :
+> Définissez `SECRET_KEY` dans le fichier `.env` avant toute mise en production.
 
-| Rôle     | Email                      | Mot de passe |
-|----------|----------------------------|--------------|
-| Gérant   | `admin@divixmaquis.ci`     | `admin123`   |
-| Caissier | `caisse@divixmaquis.ci`    | `caisse123`  |
-| Gestionnaire de stock | `stock@divixmaquis.ci` | `stock123` |
-| Serveur  | `serveur@divixmaquis.ci`   | `serveur123` |
-| Serveur bar | `bar@divixmaquis.ci`    | `bar123`     |
-| Serveur restaurant | `resto@divixmaquis.ci` | `resto123` |
-| Administrateur plateforme | `plateforme@divix.ci` | `plateforme123` |
-
-> Changez ces mots de passe avant toute mise en production, et définissez `SECRET_KEY`
-> dans le fichier `.env`.
+Aucun compte n'est créé à l'installation : le premier gérant s'inscrit lui-même par
+`/inscription`, et le compte de l'éditeur par `/support`. Les comptes de la suite de
+tests (`admin@divixmaquis.ci` et les autres) ne sont créés que par
+`tests/jeu_de_donnees.py`, et ne partent donc jamais en production.
 
 ## Plusieurs établissements dans la même base
 
@@ -381,10 +403,11 @@ divix_maquis/
 │   ├── models.py           utilisateur Flask-Login
 │   ├── lectures.py         toutes les lectures (listes, compteurs, dashboard)
 │   └── ecritures.py        toutes les écritures (commandes, caisse, stock, dépenses)
-├── donnees_demo.py         initialisation + jeu de démonstration
+├── donnees_demo.py         données d'installation (rôles, et rien d'autre)
 ├── outils/                 scripts hors application
 │   ├── creer_compte_plateforme.py   le compte de l'éditeur, hors interface courante
 │   └── generer_icones.py            régénère les icônes embarquées
+├── tests/jeu_de_donnees.py un maquis complet, pour les tests seulement
 ├── templates/              interface reprise de Divix SysPaie
 │   └── carte.html          servie par /maquis et par /menu
 ├── static/css/             admin.css, login.css, table-mobile.css (identiques) + maquis.css
