@@ -60,7 +60,7 @@ droit de créer une base. Connexion configurée par variables d'environnement :
 | Variable            | Défaut         | Rôle |
 |---------------------|----------------|------|
 | `DB_HOST`           | `localhost`    | Hôte du serveur |
-| `DB_PORT`           | `3306`         | Port (un MySQL managé n'écoute pas toujours sur 3306) |
+| `DB_PORT`           | *(non transmis)* | À ne renseigner que si l'hébergeur écoute ailleurs que sur le port par défaut |
 | `DB_USER`           | —              | Utilisateur |
 | `DB_PASSWORD`       | *(vide)*       | Mot de passe |
 | `DATABASE`          | `divix_maquis` | Nom de la base |

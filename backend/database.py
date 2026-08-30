@@ -35,14 +35,19 @@ def parametres_connexion(avec_base=True):
 
     parametres = {
         "host": os.getenv("DB_HOST"),
-        # Un MySQL managé n'écoute pas forcément sur 3306.
-        "port": int(os.getenv("DB_PORT") or 3306),
         "user": os.getenv("DB_USER"),
         "password": os.getenv("DB_PASSWORD"),
         "charset": "utf8mb4",
         "cursorclass": DictCursor,
         "autocommit": False,
     }
+    # Le port n'est transmis que s'il est demandé : forcer 3306 empêchait de se
+    # connecter là où l'hébergeur écoute ailleurs, et une variable vide ou mal
+    # renseignée faisait échouer la connexion sans rien expliquer. Absent, c'est
+    # PyMySQL qui choisit son défaut.
+    port = (os.getenv("DB_PORT") or "").strip()
+    if port:
+        parametres["port"] = int(port)
     socket_unix = os.getenv("MYSQL_UNIX_SOCKET")
     if socket_unix:
         parametres["unix_socket"] = socket_unix

@@ -1,18 +1,4 @@
-"""Crée le compte de l'éditeur, celui qui ouvre la console des établissements.
 
-Ce compte ne peut pas se créer depuis l'interface, et c'est voulu : le rôle
-« Administrateur plateforme » n'est pas attribuable depuis la page
-Administration d'un maquis, sans quoi un gérant se hisserait au niveau de
-l'éditeur. Il faut donc une porte d'entrée en dehors du logiciel — la voici.
-
-    python outils/creer_compte_plateforme.py
-    python outils/creer_compte_plateforme.py --email support@divix.ci
-
-Le script se connecte à la base désignée par les variables d'environnement
-habituelles (DB_HOST, DB_USER, DB_PASSWORD, DATABASE), comme l'application.
-Sur un hébergeur, lancez-le depuis le shell du service : il y trouvera la même
-configuration.
-"""
 
 import argparse
 import getpass
@@ -40,10 +26,10 @@ def demander_mot_de_passe():
         # processus, où n'importe qui sur la machine peut le lire.
         mot_de_passe = getpass.getpass("Mot de passe : ")
         if len(mot_de_passe) < LONGUEUR_MOT_DE_PASSE:
-            print(f"  → au moins {LONGUEUR_MOT_DE_PASSE} caractères, recommencez.")
+            print(f"au moins {LONGUEUR_MOT_DE_PASSE} caractères, recommencez.")
             continue
         if mot_de_passe != getpass.getpass("Confirmez le mot de passe : "):
-            print("  → les deux saisies diffèrent, recommencez.")
+            print("les deux saisies diffèrent, recommencez.")
             continue
         return mot_de_passe
 
